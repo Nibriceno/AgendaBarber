@@ -1,29 +1,23 @@
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
 
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  app.enableCors({
+    origin: 'http://localhost:5173',
+    credentials: true,
+  });
+
   app.useGlobalPipes(
     new ValidationPipe({
-      transform: true,
       whitelist: true,
       forbidNonWhitelisted: true,
+      transform: true,
     }),
   );
-
-  const config = new DocumentBuilder()
-    .setTitle('Barber Booking API')
-    .setDescription('API para sistema de reservas de barbería')
-    .setVersion('1.0')
-    .build();
-
-  const document = SwaggerModule.createDocument(app, config);
-
-  SwaggerModule.setup('api', app, document);
 
   await app.listen(process.env.PORT ?? 3000);
 }

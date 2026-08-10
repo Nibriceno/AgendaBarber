@@ -7,10 +7,18 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
+
+import { UserRole } from '@prisma/client';
+
 import { BarberServicesService } from './barber-services.service';
 import { CreateBarberServiceDto } from './dto/create-barber-service.dto';
 import { UpdateBarberServiceDto } from './dto/update-barber-service.dto';
+
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('barber-services')
 export class BarberServicesController {
@@ -18,7 +26,13 @@ export class BarberServicesController {
     private readonly barberServicesService: BarberServicesService,
   ) {}
 
+  // Crear relación barbero-servicio
   @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
   create(
     @Body()
     createBarberServiceDto: CreateBarberServiceDto,
@@ -28,11 +42,13 @@ export class BarberServicesController {
     );
   }
 
+  // Público
   @Get()
   findAll() {
     return this.barberServicesService.findAll();
   }
 
+  // Público
   @Get(':id')
   findOne(
     @Param('id', ParseIntPipe) id: number,
@@ -40,7 +56,13 @@ export class BarberServicesController {
     return this.barberServicesService.findOne(id);
   }
 
+  // Editar relación
   @Patch(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body()
@@ -52,7 +74,10 @@ export class BarberServicesController {
     );
   }
 
+  // Eliminar relación
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   remove(
     @Param('id', ParseIntPipe) id: number,
   ) {

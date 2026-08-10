@@ -3,23 +3,51 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+
 import { Prisma } from '@prisma/client';
+
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBarberDto } from './dto/create-barber.dto';
 import { UpdateBarberDto } from './dto/update-barber.dto';
 
 @Injectable()
 export class BarbersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+  ) {}
 
-  async create(createBarberDto: CreateBarberDto) {
-    const business = await this.prisma.business.findFirst({
-      where: {
-        id: createBarberDto.businessId,
-        deletedAt: null,
-        isActive: true,
-      },
-    });
+  private userSelect() {
+    return {
+      id: true,
+      businessId: true,
+      firstName: true,
+      lastName: true,
+      phone: true,
+      email: true,
+      role: true,
+      birthDate: true,
+      isRegistered: true,
+      isActive: true,
+      emailVerified: true,
+      phoneVerified: true,
+      lastLoginAt: true,
+      createdAt: true,
+      updatedAt: true,
+      deletedAt: true,
+    };
+  }
+
+  async create(
+    createBarberDto: CreateBarberDto,
+  ) {
+    const business =
+      await this.prisma.business.findFirst({
+        where: {
+          id: createBarberDto.businessId,
+          deletedAt: null,
+          isActive: true,
+        },
+      });
 
     if (!business) {
       throw new NotFoundException(
@@ -33,12 +61,13 @@ export class BarbersService {
         createBarberDto.businessId,
       );
 
-      const existingBarber = await this.prisma.barber.findFirst({
-        where: {
-          userId: createBarberDto.userId,
-          deletedAt: null,
-        },
-      });
+      const existingBarber =
+        await this.prisma.barber.findFirst({
+          where: {
+            userId: createBarberDto.userId,
+            deletedAt: null,
+          },
+        });
 
       if (existingBarber) {
         throw new ConflictException(
@@ -68,10 +97,12 @@ export class BarbersService {
       }),
 
       ...(createBarberDto.calendarColor !== undefined && {
-        calendarColor: createBarberDto.calendarColor,
+        calendarColor:
+          createBarberDto.calendarColor,
       }),
 
-      ...(createBarberDto.commissionPercentage !== undefined && {
+      ...(createBarberDto.commissionPercentage !==
+        undefined && {
         commissionPercentage:
           createBarberDto.commissionPercentage,
       }),
@@ -89,7 +120,9 @@ export class BarbersService {
       data,
       include: {
         business: true,
-        user: true,
+        user: {
+          select: this.userSelect(),
+        },
       },
     });
   }
@@ -102,7 +135,11 @@ export class BarbersService {
       },
       include: {
         business: true,
-        user: true,
+
+        user: {
+          select: this.userSelect(),
+        },
+
         services: {
           where: {
             isActive: true,
@@ -124,30 +161,37 @@ export class BarbersService {
   }
 
   async findOne(id: number) {
-    const barber = await this.prisma.barber.findFirst({
-      where: {
-        id,
-        deletedAt: null,
-      },
-      include: {
-        business: true,
-        user: true,
-        services: {
-          where: {
-            isActive: true,
-          },
-          include: {
-            service: true,
-          },
+    const barber =
+      await this.prisma.barber.findFirst({
+        where: {
+          id,
+          deletedAt: null,
         },
-        schedules: {
-          where: {
-            isActive: true,
+        include: {
+          business: true,
+
+          user: {
+            select: this.userSelect(),
           },
+
+          services: {
+            where: {
+              isActive: true,
+            },
+            include: {
+              service: true,
+            },
+          },
+
+          schedules: {
+            where: {
+              isActive: true,
+            },
+          },
+
+          scheduleExceptions: true,
         },
-        scheduleExceptions: true,
-      },
-    });
+      });
 
     if (!barber) {
       throw new NotFoundException(
@@ -162,22 +206,28 @@ export class BarbersService {
     id: number,
     updateBarberDto: UpdateBarberDto,
   ) {
-    const currentBarber = await this.findOne(id);
+    const currentBarber =
+      await this.findOne(id);
 
     const businessId =
-      updateBarberDto.businessId ?? currentBarber.businessId;
+      updateBarberDto.businessId ??
+      currentBarber.businessId;
 
     const userId =
-      updateBarberDto.userId ?? currentBarber.userId;
+      updateBarberDto.userId ??
+      currentBarber.userId;
 
-    if (updateBarberDto.businessId !== undefined) {
-      const business = await this.prisma.business.findFirst({
-        where: {
-          id: updateBarberDto.businessId,
-          deletedAt: null,
-          isActive: true,
-        },
-      });
+    if (
+      updateBarberDto.businessId !== undefined
+    ) {
+      const business =
+        await this.prisma.business.findFirst({
+          where: {
+            id: updateBarberDto.businessId,
+            deletedAt: null,
+            isActive: true,
+          },
+        });
 
       if (!business) {
         throw new NotFoundException(
@@ -191,19 +241,25 @@ export class BarbersService {
       (updateBarberDto.userId !== undefined ||
         updateBarberDto.businessId !== undefined)
     ) {
-      await this.validateUser(userId, businessId);
+      await this.validateUser(
+        userId,
+        businessId,
+      );
     }
 
-    if (updateBarberDto.userId !== undefined) {
-      const existingBarber = await this.prisma.barber.findFirst({
-        where: {
-          id: {
-            not: id,
+    if (
+      updateBarberDto.userId !== undefined
+    ) {
+      const existingBarber =
+        await this.prisma.barber.findFirst({
+          where: {
+            id: {
+              not: id,
+            },
+            userId: updateBarberDto.userId,
+            deletedAt: null,
           },
-          userId: updateBarberDto.userId,
-          deletedAt: null,
-        },
-      });
+        });
 
       if (existingBarber) {
         throw new ConflictException(
@@ -238,16 +294,19 @@ export class BarbersService {
       }),
 
       ...(updateBarberDto.calendarColor !== undefined && {
-        calendarColor: updateBarberDto.calendarColor,
+        calendarColor:
+          updateBarberDto.calendarColor,
       }),
 
-      ...(updateBarberDto.commissionPercentage !== undefined && {
+      ...(updateBarberDto.commissionPercentage !==
+        undefined && {
         commissionPercentage:
           updateBarberDto.commissionPercentage,
       }),
 
       ...(updateBarberDto.displayOrder !== undefined && {
-        displayOrder: updateBarberDto.displayOrder,
+        displayOrder:
+          updateBarberDto.displayOrder,
       }),
 
       ...(updateBarberDto.isActive !== undefined && {
@@ -262,7 +321,9 @@ export class BarbersService {
       data,
       include: {
         business: true,
-        user: true,
+        user: {
+          select: this.userSelect(),
+        },
       },
     });
   }
@@ -280,7 +341,9 @@ export class BarbersService {
       },
       include: {
         business: true,
-        user: true,
+        user: {
+          select: this.userSelect(),
+        },
       },
     });
   }
@@ -289,14 +352,15 @@ export class BarbersService {
     userId: number,
     businessId: number,
   ) {
-    const user = await this.prisma.user.findFirst({
-      where: {
-        id: userId,
-        businessId,
-        deletedAt: null,
-        isActive: true,
-      },
-    });
+    const user =
+      await this.prisma.user.findFirst({
+        where: {
+          id: userId,
+          businessId,
+          deletedAt: null,
+          isActive: true,
+        },
+      });
 
     if (!user) {
       throw new NotFoundException(

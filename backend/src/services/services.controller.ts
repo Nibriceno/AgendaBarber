@@ -11,6 +11,11 @@ import {
 import { ServicesService } from './services.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
+import { UseGuards } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('services')
 export class ServicesController {
@@ -19,6 +24,11 @@ export class ServicesController {
   ) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
   create(@Body() createServiceDto: CreateServiceDto) {
     return this.servicesService.create(createServiceDto);
   }
@@ -36,6 +46,11 @@ export class ServicesController {
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateServiceDto: UpdateServiceDto,
@@ -44,6 +59,8 @@ export class ServicesController {
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   remove(
     @Param('id', ParseIntPipe) id: number,
   ) {

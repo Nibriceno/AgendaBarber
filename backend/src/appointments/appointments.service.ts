@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -14,10 +15,187 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
+import { UserRole } from '@prisma/client';
+import { AuthUser } from '../auth/interfaces/auth-user.interface';
+
 
 @Injectable()
 export class AppointmentsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async findOneAuthorized(
+  id: number,
+  currentUser: AuthUser,
+) 
+
+
+ 
+{
+  const appointment =
+    await this.prisma.appointment.findFirst({
+      where: {
+        id,
+        businessId: currentUser.businessId,
+        deletedAt: null,
+      },
+    });
+
+  if (!appointment) {
+    throw new NotFoundException(
+      `No se encontró la reserva con ID ${id}`,
+    );
+  }
+
+  // ADMIN y RECEPTIONIST pueden ver cualquier reserva
+  // de su propia barbería.
+  if (
+    currentUser.role === UserRole.ADMIN ||
+    currentUser.role === UserRole.RECEPTIONIST
+  ) {
+    return this.findOne(id);
+  }
+
+  // CLIENT solo puede ver sus propias reservas.
+  if (currentUser.role === UserRole.CLIENT) {
+    if (appointment.customerId !== currentUser.id) {
+      throw new ForbiddenException(
+        'No tienes permiso para ver esta reserva',
+      );
+    }
+
+    return this.findOne(id);
+  }
+
+  // BARBER solo puede ver reservas asignadas a él.
+  if (currentUser.role === UserRole.BARBER) {
+    const barber = await this.prisma.barber.findFirst({
+      where: {
+        userId: currentUser.id,
+        businessId: currentUser.businessId,
+        isActive: true,
+        deletedAt: null,
+      },
+    });
+
+    if (!barber) {
+      throw new ForbiddenException(
+        'El usuario no tiene un perfil de barbero activo',
+      );
+    }
+
+    if (appointment.barberId !== barber.id) {
+      throw new ForbiddenException(
+        'No tienes permiso para ver esta reserva',
+      );
+    }
+
+    return this.findOne(id);
+  }
+
+  throw new ForbiddenException(
+    'No tienes permiso para ver esta reserva',
+  );
+}
+async findMyAppointments(
+  currentUser: AuthUser,
+) {
+  if (currentUser.role !== UserRole.CLIENT) {
+    throw new ForbiddenException(
+      'Esta ruta es solo para clientes',
+    );
+  }
+
+  return this.prisma.appointment.findMany({
+    where: {
+      businessId: currentUser.businessId,
+      customerId: currentUser.id,
+      deletedAt: null,
+    },
+    include: this.appointmentInclude(),
+    orderBy: {
+      startAt: 'desc',
+    },
+  });
+}
+
+async findMyBarberAppointments(
+  currentUser: AuthUser,
+) {
+  if (currentUser.role !== UserRole.BARBER) {
+    throw new ForbiddenException(
+      'Esta ruta es solo para barberos',
+    );
+  }
+
+  const barber = await this.prisma.barber.findFirst({
+    where: {
+      userId: currentUser.id,
+      businessId: currentUser.businessId,
+      isActive: true,
+      deletedAt: null,
+    },
+  });
+
+  if (!barber) {
+    throw new NotFoundException(
+      'No se encontró un perfil de barbero asociado al usuario',
+    );
+  }
+
+  return this.prisma.appointment.findMany({
+    where: {
+      businessId: currentUser.businessId,
+      barberId: barber.id,
+      deletedAt: null,
+    },
+    include: this.appointmentInclude(),
+    orderBy: {
+      startAt: 'asc',
+    },
+  });
+}
+
+async updateAuthorized(
+  id: number,
+  updateAppointmentDto: UpdateAppointmentDto,
+  currentUser: AuthUser,
+) {
+  // Comprueba que ADMIN/RECEPTIONIST sean de la barbería
+  // o que BARBER sea dueño de la reserva.
+  await this.findOneAuthorized(id, currentUser);
+
+  return this.update(
+    id,
+    updateAppointmentDto,
+  );
+}
+
+  async rescheduleAuthorized(
+    id: number,
+    rescheduleAppointmentDto: RescheduleAppointmentDto,
+    currentUser: AuthUser,
+  ) {
+    // CLIENT solo puede reprogramar su reserva.
+    // BARBER solo puede reprogramar una asignada a él.
+    await this.findOneAuthorized(id, currentUser);
+
+    return this.reschedule(
+      id,
+      rescheduleAppointmentDto,
+    );
+  }
+
+  async removeAuthorized(
+    id: number,
+    currentUser: AuthUser,
+  ) {
+    // CLIENT solo puede cancelar su reserva.
+    // BARBER solo puede cancelar una asignada a él.
+    await this.findOneAuthorized(id, currentUser);
+
+    return this.remove(id);
+  }
+
 
   async create(createAppointmentDto: CreateAppointmentDto) {
     const business = await this.validateBusiness(
@@ -1054,21 +1232,42 @@ async update(
   private appointmentInclude() {
     return {
       business: true,
-      customer: true,
+
+      customer: {
+        select: {
+          id: true,
+          businessId: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          email: true,
+          role: true,
+          birthDate: true,
+          isRegistered: true,
+          isActive: true,
+          emailVerified: true,
+          phoneVerified: true,
+          lastLoginAt: true,
+          createdAt: true,
+          updatedAt: true,
+          deletedAt: true,
+        },
+      },
+
       barber: true,
+
       services: {
         include: {
           service: true,
         },
         orderBy: {
-          displayOrder:
-            Prisma.SortOrder.asc,
+          displayOrder: Prisma.SortOrder.asc,
         },
       },
+
       history: {
         orderBy: {
-          createdAt:
-            Prisma.SortOrder.asc,
+          createdAt: Prisma.SortOrder.asc,
         },
       },
     } satisfies Prisma.AppointmentInclude;
