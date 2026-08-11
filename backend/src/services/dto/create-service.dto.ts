@@ -5,22 +5,23 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
 } from 'class-validator';
 
 export class CreateServiceDto {
   @IsInt()
-  businessId!: number;
-
-  @IsInt()
+  @Min(1)
   categoryId!: number;
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(120)
   name!: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   description?: string;
 
   @IsInt()
@@ -40,10 +41,6 @@ export class CreateServiceDto {
   @IsNumber()
   @Min(0)
   price!: number;
-
-  @IsOptional()
-  @IsString()
-  imageUrl?: string;
 
   @IsOptional()
   @IsInt()

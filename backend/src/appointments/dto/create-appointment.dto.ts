@@ -11,13 +11,10 @@ import {
 } from 'class-validator';
 
 export class CreateAppointmentDto {
+  @IsOptional()
   @IsInt()
   @Min(1)
-  businessId!: number;
-
-  @IsInt()
-  @Min(1)
-  customerId!: number;
+  customerId?: number;
 
   @IsInt()
   @Min(1)

@@ -1,6 +1,17 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+
 import { AvailabilityService } from './availability.service';
 import { CheckAvailabilityDto } from './dto/check-availability.dto';
+
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+
+import type { AuthUser } from '../auth/interfaces/auth-user.interface';
 
 @Controller('availability')
 export class AvailabilityController {
@@ -8,12 +19,18 @@ export class AvailabilityController {
     private readonly availabilityService: AvailabilityService,
   ) {}
 
-  @Post()
+  @Get()
+  @UseGuards(JwtAuthGuard)
   check(
-    @Body() checkAvailabilityDto: CheckAvailabilityDto,
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Query()
+    dto: CheckAvailabilityDto,
   ) {
     return this.availabilityService.check(
-      checkAvailabilityDto,
+      currentUser.businessId,
+      dto,
     );
   }
 }

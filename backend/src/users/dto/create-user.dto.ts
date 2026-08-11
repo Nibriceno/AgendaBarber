@@ -1,54 +1,50 @@
 import {
-  IsBoolean,
   IsDateString,
   IsEmail,
   IsEnum,
-  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
-  Min,
+  Matches,
+  MaxLength,
+  MinLength,
 } from 'class-validator';
+
 import { UserRole } from '@prisma/client';
 
 export class CreateUserDto {
-  @IsInt()
-  @Min(1)
-  businessId!: number;
-
   @IsString()
   @IsNotEmpty()
+  @MaxLength(80)
   firstName!: string;
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(80)
   lastName!: string;
 
   @IsString()
   @IsNotEmpty()
+  @Matches(/^\+?[0-9]{8,15}$/, {
+    message:
+      'El teléfono no tiene un formato válido.',
+  })
   phone!: string;
 
   @IsOptional()
   @IsEmail()
+  @MaxLength(150)
   email?: string;
 
-  @IsOptional()
   @IsString()
-  password?: string;
+  @MinLength(8)
+  @MaxLength(72)
+  password!: string;
 
-  @IsOptional()
   @IsEnum(UserRole)
-  role?: UserRole;
+  role!: UserRole;
 
   @IsOptional()
   @IsDateString()
   birthDate?: string;
-
-  @IsOptional()
-  @IsBoolean()
-  isRegistered?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
 }

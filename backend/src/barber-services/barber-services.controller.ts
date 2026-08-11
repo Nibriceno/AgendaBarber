@@ -13,74 +13,104 @@ import {
 import { UserRole } from '@prisma/client';
 
 import { BarberServicesService } from './barber-services.service';
+
 import { CreateBarberServiceDto } from './dto/create-barber-service.dto';
 import { UpdateBarberServiceDto } from './dto/update-barber-service.dto';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+
+import type { AuthUser } from '../auth/interfaces/auth-user.interface';
 
 @Controller('barber-services')
 export class BarberServicesController {
   constructor(
-    private readonly barberServicesService: BarberServicesService,
+    private readonly barberServicesService:
+      BarberServicesService,
   ) {}
 
-  // Crear relación barbero-servicio
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
   @Roles(
     UserRole.ADMIN,
     UserRole.RECEPTIONIST,
   )
   create(
+    @CurrentUser()
+    currentUser: AuthUser,
+
     @Body()
-    createBarberServiceDto: CreateBarberServiceDto,
+    dto: CreateBarberServiceDto,
   ) {
     return this.barberServicesService.create(
-      createBarberServiceDto,
+      currentUser.businessId,
+      dto,
     );
   }
 
-  // Público
   @Get()
   findAll() {
     return this.barberServicesService.findAll();
   }
 
-  // Público
   @Get(':id')
   findOne(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParseIntPipe)
+    id: number,
   ) {
-    return this.barberServicesService.findOne(id);
+    return this.barberServicesService.findOne(
+      id,
+    );
   }
 
-  // Editar relación
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
   @Roles(
     UserRole.ADMIN,
     UserRole.RECEPTIONIST,
   )
   update(
-    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Param('id', ParseIntPipe)
+    id: number,
+
     @Body()
-    updateBarberServiceDto: UpdateBarberServiceDto,
+    dto: UpdateBarberServiceDto,
   ) {
     return this.barberServicesService.update(
+      currentUser.businessId,
       id,
-      updateBarberServiceDto,
+      dto,
     );
   }
 
-  // Eliminar relación
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
   @Roles(UserRole.ADMIN)
   remove(
-    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Param('id', ParseIntPipe)
+    id: number,
   ) {
-    return this.barberServicesService.remove(id);
+    return this.barberServicesService.remove(
+      currentUser.businessId,
+      id,
+    );
   }
 }

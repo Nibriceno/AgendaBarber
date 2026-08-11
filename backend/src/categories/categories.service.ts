@@ -3,7 +3,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+
 import { PrismaService } from '../prisma/prisma.service';
+
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 
@@ -13,61 +15,41 @@ export class CategoriesService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async create(createCategoryDto: CreateCategoryDto) {
-    const business = await this.prisma.business.findFirst({
-      where: {
-        id: createCategoryDto.businessId,
-        deletedAt: null,
-        isActive: true,
-      },
-    });
+  async create(
+    businessId: number,
+    dto: CreateCategoryDto,
+  ) {
+    await this.validateBusiness(
+      businessId,
+    );
 
-    if (!business) {
-      throw new NotFoundException(
-        `Business with ID ${createCategoryDto.businessId} not found`,
-      );
-    }
-
-    const existingCategory = await this.prisma.category.findFirst({
-      where: {
-        businessId: createCategoryDto.businessId,
-        name: {
-          equals: createCategoryDto.name,
-          mode: 'insensitive',
-        },
-        deletedAt: null,
-      },
-    });
-
-    if (existingCategory) {
-      throw new ConflictException(
-        'A category with this name already exists',
-      );
-    }
+    await this.validateDuplicatedName(
+      businessId,
+      dto.name,
+    );
 
     return this.prisma.category.create({
-      data: createCategoryDto,
-      include: {
-        business: true,
+      data: {
+        businessId,
+        name: dto.name.trim(),
+        description:
+          dto.description?.trim() ??
+          null,
+        displayOrder:
+          dto.displayOrder ?? 0,
+        isActive:
+          dto.isActive ?? true,
       },
     });
   }
 
-  findAll() {
+  async findAll() {
     return this.prisma.category.findMany({
       where: {
         deletedAt: null,
         isActive: true,
       },
-      include: {
-        business: true,
-        services: {
-          where: {
-            deletedAt: null,
-            isActive: true,
-          },
-        },
-      },
+
       orderBy: [
         {
           displayOrder: 'asc',
@@ -79,25 +61,21 @@ export class CategoriesService {
     });
   }
 
-  async findOne(id: number) {
-    const category = await this.prisma.category.findFirst({
-      where: {
-        id,
-        deletedAt: null,
-      },
-      include: {
-        business: true,
-        services: {
-          where: {
-            deletedAt: null,
-          },
+  async findOne(
+    id: number,
+  ) {
+    const category =
+      await this.prisma.category.findFirst({
+        where: {
+          id,
+          deletedAt: null,
+          isActive: true,
         },
-      },
-    });
+      });
 
     if (!category) {
       throw new NotFoundException(
-        `Category with ID ${id} not found`,
+        'Categoría no encontrada.',
       );
     }
 
@@ -105,75 +83,163 @@ export class CategoriesService {
   }
 
   async update(
+    businessId: number,
     id: number,
-    updateCategoryDto: UpdateCategoryDto,
+    dto: UpdateCategoryDto,
   ) {
-    const currentCategory = await this.findOne(id);
+    const category =
+      await this.findOwnedCategory(
+        businessId,
+        id,
+      );
 
-    const businessId =
-      updateCategoryDto.businessId ?? currentCategory.businessId;
-
-    if (updateCategoryDto.businessId) {
-      const business = await this.prisma.business.findFirst({
-        where: {
-          id: updateCategoryDto.businessId,
-          deletedAt: null,
-          isActive: true,
-        },
-      });
-
-      if (!business) {
-        throw new NotFoundException(
-          `Business with ID ${updateCategoryDto.businessId} not found`,
-        );
-      }
-    }
-
-    if (updateCategoryDto.name) {
-      const duplicatedCategory =
-        await this.prisma.category.findFirst({
-          where: {
-            id: {
-              not: id,
-            },
-            businessId,
-            name: {
-              equals: updateCategoryDto.name,
-              mode: 'insensitive',
-            },
-            deletedAt: null,
-          },
-        });
-
-      if (duplicatedCategory) {
-        throw new ConflictException(
-          'A category with this name already exists',
-        );
-      }
+    if (
+      dto.name !== undefined
+    ) {
+      await this.validateDuplicatedName(
+        businessId,
+        dto.name,
+        id,
+      );
     }
 
     return this.prisma.category.update({
       where: {
-        id,
+        id: category.id,
       },
-      data: updateCategoryDto,
-      include: {
-        business: true,
+
+      data: {
+        ...(dto.name !==
+          undefined && {
+          name: dto.name.trim(),
+        }),
+
+        ...(dto.description !==
+          undefined && {
+          description:
+            dto.description.trim() ||
+            null,
+        }),
+
+        ...(dto.displayOrder !==
+          undefined && {
+          displayOrder:
+            dto.displayOrder,
+        }),
+
+        ...(dto.isActive !==
+          undefined && {
+          isActive:
+            dto.isActive,
+        }),
       },
     });
   }
 
-  async remove(id: number) {
-    await this.findOne(id);
+  async remove(
+    businessId: number,
+    id: number,
+  ) {
+    const category =
+      await this.findOwnedCategory(
+        businessId,
+        id,
+      );
 
     return this.prisma.category.update({
       where: {
-        id,
+        id: category.id,
       },
+
       data: {
         isActive: false,
         deletedAt: new Date(),
       },
     });
+  }
+
+  private async findOwnedCategory(
+    businessId: number,
+    id: number,
+  ) {
+    const category =
+      await this.prisma.category.findFirst({
+        where: {
+          id,
+          businessId,
+          deletedAt: null,
+        },
+
+        select: {
+          id: true,
+        },
+      });
+
+    if (!category) {
+      throw new NotFoundException(
+        'Categoría no encontrada.',
+      );
+    }
+
+    return category;
+  }
+
+  private async validateBusiness(
+    businessId: number,
+  ) {
+    const business =
+      await this.prisma.business.findFirst({
+        where: {
+          id: businessId,
+          deletedAt: null,
+          isActive: true,
+        },
+
+        select: {
+          id: true,
+        },
+      });
+
+    if (!business) {
+      throw new NotFoundException(
+        'Barbería no encontrada o inactiva.',
+      );
+    }
+  }
+
+  private async validateDuplicatedName(
+    businessId: number,
+    name: string,
+    excludedCategoryId?: number,
+  ) {
+    const normalizedName =
+      name.trim();
+
+    const existingCategory =
+      await this.prisma.category.findFirst({
+        where: {
+          businessId,
+          name: normalizedName,
+          deletedAt: null,
+
+          ...(excludedCategoryId !==
+            undefined && {
+            id: {
+              not:
+                excludedCategoryId,
+            },
+          }),
+        },
+
+        select: {
+          id: true,
+        },
+      });
+
+    if (existingCategory) {
+      throw new ConflictException(
+        'Ya existe una categoría con este nombre.',
+      );
+    }
   }
 }

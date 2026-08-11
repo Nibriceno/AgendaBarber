@@ -4,50 +4,82 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+
+import {
+  DayOfWeek,
+} from '@prisma/client';
+
 import { PrismaService } from '../prisma/prisma.service';
+
 import { CreateScheduleDto } from './dto/create-schedule.dto';
 import { UpdateScheduleDto } from './dto/update-schedule.dto';
 
 @Injectable()
 export class SchedulesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+  ) {}
 
-  async create(createScheduleDto: CreateScheduleDto) {
-    await this.validateBarber(createScheduleDto.barberId);
+  async create(
+    businessId: number,
+    dto: CreateScheduleDto,
+  ) {
+    await this.validateBarber(
+      businessId,
+      dto.barberId,
+    );
 
     this.validateTimeRange(
-      createScheduleDto.startMinute,
-      createScheduleDto.endMinute,
+      dto.startMinute,
+      dto.endMinute,
     );
 
     await this.validateOverlap(
-      createScheduleDto.barberId,
-      createScheduleDto.dayOfWeek,
-      createScheduleDto.startMinute,
-      createScheduleDto.endMinute,
+      dto.barberId,
+      dto.dayOfWeek,
+      dto.startMinute,
+      dto.endMinute,
     );
 
     return this.prisma.schedule.create({
-      data: createScheduleDto,
-      include: {
-        barber: true,
+      data: {
+        barberId:
+          dto.barberId,
+
+        dayOfWeek:
+          dto.dayOfWeek,
+
+        startMinute:
+          dto.startMinute,
+
+        endMinute:
+          dto.endMinute,
+
+        isActive:
+          dto.isActive ?? true,
       },
     });
   }
 
-  findAll() {
+  async findAll() {
     return this.prisma.schedule.findMany({
       where: {
         isActive: true,
+
         barber: {
-          deletedAt: null,
           isActive: true,
+          deletedAt: null,
         },
       },
+
       include: {
         barber: true,
       },
+
       orderBy: [
+        {
+          barberId: 'asc',
+        },
         {
           dayOfWeek: 'asc',
         },
@@ -58,38 +90,29 @@ export class SchedulesService {
     });
   }
 
-  async findByBarber(barberId: number) {
-    await this.validateBarber(barberId);
+  async findOne(
+    id: number,
+  ) {
+    const schedule =
+      await this.prisma.schedule.findFirst({
+        where: {
+          id,
+          isActive: true,
 
-    return this.prisma.schedule.findMany({
-      where: {
-        barberId,
-        isActive: true,
-      },
-      orderBy: [
-        {
-          dayOfWeek: 'asc',
+          barber: {
+            isActive: true,
+            deletedAt: null,
+          },
         },
-        {
-          startMinute: 'asc',
-        },
-      ],
-    });
-  }
 
-  async findOne(id: number) {
-    const schedule = await this.prisma.schedule.findUnique({
-      where: {
-        id,
-      },
-      include: {
-        barber: true,
-      },
-    });
+        include: {
+          barber: true,
+        },
+      });
 
     if (!schedule) {
       throw new NotFoundException(
-        `No se encontró el horario con ID ${id}`,
+        'Horario no encontrado.',
       );
     }
 
@@ -97,30 +120,46 @@ export class SchedulesService {
   }
 
   async update(
+    businessId: number,
     id: number,
-    updateScheduleDto: UpdateScheduleDto,
+    dto: UpdateScheduleDto,
   ) {
-    const currentSchedule = await this.findOne(id);
+    const current =
+      await this.findOwnedSchedule(
+        businessId,
+        id,
+      );
 
     const barberId =
-      updateScheduleDto.barberId ??
-      currentSchedule.barberId;
+      dto.barberId ??
+      current.barberId;
 
     const dayOfWeek =
-      updateScheduleDto.dayOfWeek ??
-      currentSchedule.dayOfWeek;
+      dto.dayOfWeek ??
+      current.dayOfWeek;
 
     const startMinute =
-      updateScheduleDto.startMinute ??
-      currentSchedule.startMinute;
+      dto.startMinute ??
+      current.startMinute;
 
     const endMinute =
-      updateScheduleDto.endMinute ??
-      currentSchedule.endMinute;
+      dto.endMinute ??
+      current.endMinute;
 
-    await this.validateBarber(barberId);
+    if (
+      dto.barberId !==
+      undefined
+    ) {
+      await this.validateBarber(
+        businessId,
+        dto.barberId,
+      );
+    }
 
-    this.validateTimeRange(startMinute, endMinute);
+    this.validateTimeRange(
+      startMinute,
+      endMinute,
+    );
 
     await this.validateOverlap(
       barberId,
@@ -132,79 +171,151 @@ export class SchedulesService {
 
     return this.prisma.schedule.update({
       where: {
-        id,
+        id: current.id,
       },
-      data: updateScheduleDto,
-      include: {
-        barber: true,
+
+      data: {
+        ...(dto.barberId !==
+          undefined && {
+          barberId:
+            dto.barberId,
+        }),
+
+        ...(dto.dayOfWeek !==
+          undefined && {
+          dayOfWeek:
+            dto.dayOfWeek,
+        }),
+
+        ...(dto.startMinute !==
+          undefined && {
+          startMinute:
+            dto.startMinute,
+        }),
+
+        ...(dto.endMinute !==
+          undefined && {
+          endMinute:
+            dto.endMinute,
+        }),
+
+        ...(dto.isActive !==
+          undefined && {
+          isActive:
+            dto.isActive,
+        }),
       },
     });
   }
 
-  async remove(id: number) {
-    await this.findOne(id);
+  async remove(
+    businessId: number,
+    id: number,
+  ) {
+    const schedule =
+      await this.findOwnedSchedule(
+        businessId,
+        id,
+      );
 
     return this.prisma.schedule.update({
       where: {
-        id,
+        id:
+          schedule.id,
       },
+
       data: {
         isActive: false,
-      },
-      include: {
-        barber: true,
       },
     });
   }
 
-  private async validateBarber(barberId: number) {
-    const barber = await this.prisma.barber.findFirst({
-      where: {
-        id: barberId,
-        deletedAt: null,
-        isActive: true,
-      },
-    });
+  private async validateBarber(
+    businessId: number,
+    barberId: number,
+  ) {
+    const barber =
+      await this.prisma.barber.findFirst({
+        where: {
+          id: barberId,
+          businessId,
+          isActive: true,
+          deletedAt: null,
+        },
+
+        select: {
+          id: true,
+        },
+      });
 
     if (!barber) {
       throw new NotFoundException(
-        `No se encontró un barbero activo con ID ${barberId}`,
+        'Barbero no encontrado.',
       );
     }
-
-    return barber;
   }
 
   private validateTimeRange(
     startMinute: number,
     endMinute: number,
   ) {
-    if (endMinute <= startMinute) {
+    if (
+      startMinute < 0 ||
+      startMinute > 1439
+    ) {
       throw new BadRequestException(
-        'La hora de término debe ser posterior a la hora de inicio',
+        'La hora de inicio no es válida.',
+      );
+    }
+
+    if (
+      endMinute < 1 ||
+      endMinute > 1440
+    ) {
+      throw new BadRequestException(
+        'La hora de término no es válida.',
+      );
+    }
+
+    if (
+      startMinute >= endMinute
+    ) {
+      throw new BadRequestException(
+        'La hora de término debe ser posterior a la hora de inicio.',
       );
     }
   }
 
   private async validateOverlap(
     barberId: number,
-    dayOfWeek: CreateScheduleDto['dayOfWeek'],
+    dayOfWeek: DayOfWeek,
     startMinute: number,
     endMinute: number,
     excludedScheduleId?: number,
   ) {
+    /*
+     * Dos intervalos se solapan cuando:
+     *
+     * existing.start < new.end
+     * &&
+     * existing.end > new.start
+     *
+     * Ejemplo:
+     * existente 09:00-13:00
+     * nuevo     12:00-17:00
+     *
+     * 540 < 1020 = true
+     * 780 > 720  = true
+     *
+     * Por lo tanto hay solapamiento.
+     */
+
     const overlappingSchedule =
       await this.prisma.schedule.findFirst({
         where: {
           barberId,
           dayOfWeek,
           isActive: true,
-
-          ...(excludedScheduleId !== undefined && {
-            id: {
-              not: excludedScheduleId,
-            },
-          }),
 
           startMinute: {
             lt: endMinute,
@@ -213,13 +324,61 @@ export class SchedulesService {
           endMinute: {
             gt: startMinute,
           },
+
+          ...(excludedScheduleId !==
+            undefined && {
+            id: {
+              not:
+                excludedScheduleId,
+            },
+          }),
+        },
+
+        select: {
+          id: true,
+          startMinute: true,
+          endMinute: true,
         },
       });
 
     if (overlappingSchedule) {
       throw new ConflictException(
-        'El horario se cruza con otro horario activo del barbero',
+        'El horario se solapa con otro horario existente del barbero.',
       );
     }
+  }
+
+  private async findOwnedSchedule(
+    businessId: number,
+    id: number,
+  ) {
+    const schedule =
+      await this.prisma.schedule.findFirst({
+        where: {
+          id,
+
+          barber: {
+            businessId,
+            deletedAt: null,
+          },
+        },
+
+        select: {
+          id: true,
+          barberId: true,
+          dayOfWeek: true,
+          startMinute: true,
+          endMinute: true,
+          isActive: true,
+        },
+      });
+
+    if (!schedule) {
+      throw new NotFoundException(
+        'Horario no encontrado.',
+      );
+    }
+
+    return schedule;
   }
 }

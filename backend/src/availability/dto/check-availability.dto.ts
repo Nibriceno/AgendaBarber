@@ -7,15 +7,27 @@ import {
   Min,
 } from 'class-validator';
 
-export class CheckAvailabilityDto {
-  @IsInt()
-  @Min(1)
-  businessId!: number;
+import {
+  Transform,
+  Type,
+} from 'class-transformer';
 
+export class CheckAvailabilityDto {
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   barberId!: number;
 
+  @Transform(({ value }) => {
+    const values =
+      Array.isArray(value)
+        ? value
+        : [value];
+
+    return values.map(
+      (item) => Number(item),
+    );
+  })
   @IsArray()
   @ArrayNotEmpty()
   @ArrayUnique()

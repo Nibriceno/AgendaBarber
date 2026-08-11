@@ -19,6 +19,9 @@ import { UpdateScheduleDto } from './dto/update-schedule.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+
+import type { AuthUser } from '../auth/interfaces/auth-user.interface';
 
 @Controller('schedules')
 export class SchedulesController {
@@ -33,10 +36,15 @@ export class SchedulesController {
     UserRole.RECEPTIONIST,
   )
   create(
-    @Body() createScheduleDto: CreateScheduleDto,
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Body()
+    dto: CreateScheduleDto,
   ) {
     return this.schedulesService.create(
-      createScheduleDto,
+      currentUser.businessId,
+      dto,
     );
   }
 
@@ -45,21 +53,14 @@ export class SchedulesController {
     return this.schedulesService.findAll();
   }
 
-  @Get('barber/:barberId')
-  findByBarber(
-    @Param('barberId', ParseIntPipe)
-    barberId: number,
-  ) {
-    return this.schedulesService.findByBarber(
-      barberId,
-    );
-  }
-
   @Get(':id')
   findOne(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParseIntPipe)
+    id: number,
   ) {
-    return this.schedulesService.findOne(id);
+    return this.schedulesService.findOne(
+      id,
+    );
   }
 
   @Patch(':id')
@@ -69,12 +70,19 @@ export class SchedulesController {
     UserRole.RECEPTIONIST,
   )
   update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() updateScheduleDto: UpdateScheduleDto,
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Param('id', ParseIntPipe)
+    id: number,
+
+    @Body()
+    dto: UpdateScheduleDto,
   ) {
     return this.schedulesService.update(
+      currentUser.businessId,
       id,
-      updateScheduleDto,
+      dto,
     );
   }
 
@@ -82,8 +90,15 @@ export class SchedulesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   remove(
-    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Param('id', ParseIntPipe)
+    id: number,
   ) {
-    return this.schedulesService.remove(id);
+    return this.schedulesService.remove(
+      currentUser.businessId,
+      id,
+    );
   }
 }

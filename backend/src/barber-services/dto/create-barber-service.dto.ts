@@ -16,14 +16,14 @@ export class CreateBarberServiceDto {
   serviceId!: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  customPrice?: number;
+
+  @IsOptional()
   @IsInt()
   @Min(1)
   customDurationMinutes?: number;
-
-  @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  customPrice?: number;
 
   @IsOptional()
   @IsBoolean()

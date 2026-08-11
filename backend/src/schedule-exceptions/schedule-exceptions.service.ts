@@ -4,103 +4,110 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+
 import { PrismaService } from '../prisma/prisma.service';
+
 import { CreateScheduleExceptionDto } from './dto/create-schedule-exception.dto';
 import { UpdateScheduleExceptionDto } from './dto/update-schedule-exception.dto';
 
 @Injectable()
 export class ScheduleExceptionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+  ) {}
 
   async create(
-    createScheduleExceptionDto: CreateScheduleExceptionDto,
+    businessId: number,
+    dto: CreateScheduleExceptionDto,
   ) {
     await this.validateBarber(
-      createScheduleExceptionDto.barberId,
+      businessId,
+      dto.barberId,
     );
 
-    this.validateExceptionData(
-      createScheduleExceptionDto.isDayOff ?? false,
-      createScheduleExceptionDto.startMinute,
-      createScheduleExceptionDto.endMinute,
+    const date =
+      this.parseDate(dto.date);
+
+    this.validateExceptionConfiguration(
+      dto.isDayOff,
+      dto.startMinute,
+      dto.endMinute,
     );
 
-    const date = this.parseDate(
-      createScheduleExceptionDto.date,
+    await this.validateDuplicate(
+      dto.barberId,
+      date,
     );
-
-    const existingException =
-      await this.prisma.scheduleException.findFirst({
-        where: {
-          barberId: createScheduleExceptionDto.barberId,
-          date,
-        },
-      });
-
-    if (existingException) {
-      throw new ConflictException(
-        'Ya existe una excepción para este barbero en esa fecha',
-      );
-    }
 
     return this.prisma.scheduleException.create({
       data: {
-        barberId: createScheduleExceptionDto.barberId,
+        barberId:
+          dto.barberId,
+
         date,
+
         isDayOff:
-          createScheduleExceptionDto.isDayOff ?? false,
+          dto.isDayOff,
+
         startMinute:
-          createScheduleExceptionDto.isDayOff === true
+          dto.isDayOff
             ? null
-            : createScheduleExceptionDto.startMinute,
+            : dto.startMinute!,
+
         endMinute:
-          createScheduleExceptionDto.isDayOff === true
+          dto.isDayOff
             ? null
-            : createScheduleExceptionDto.endMinute,
-        reason: createScheduleExceptionDto.reason,
+            : dto.endMinute!,
+
+        reason:
+          dto.reason?.trim() ??
+          null,
       },
+
       include: {
         barber: true,
       },
     });
   }
 
-  findAll() {
+  async findAll() {
     return this.prisma.scheduleException.findMany({
       where: {
         barber: {
-          deletedAt: null,
           isActive: true,
+          deletedAt: null,
         },
       },
+
       include: {
         barber: true,
       },
-      orderBy: {
-        date: 'asc',
-      },
+
+      orderBy: [
+        {
+          date: 'asc',
+        },
+        {
+          barberId: 'asc',
+        },
+      ],
     });
   }
 
-  async findByBarber(barberId: number) {
-    await this.validateBarber(barberId);
-
-    return this.prisma.scheduleException.findMany({
-      where: {
-        barberId,
-      },
-      orderBy: {
-        date: 'asc',
-      },
-    });
-  }
-
-  async findOne(id: number) {
+  async findOne(
+    id: number,
+  ) {
     const exception =
-      await this.prisma.scheduleException.findUnique({
+      await this.prisma.scheduleException.findFirst({
         where: {
           id,
+
+          barber: {
+            isActive: true,
+            deletedAt: null,
+          },
         },
+
         include: {
           barber: true,
         },
@@ -108,7 +115,7 @@ export class ScheduleExceptionsService {
 
     if (!exception) {
       throw new NotFoundException(
-        `No se encontró la excepción con ID ${id}`,
+        'Excepción de horario no encontrada.',
       );
     }
 
@@ -116,151 +123,306 @@ export class ScheduleExceptionsService {
   }
 
   async update(
+    businessId: number,
     id: number,
-    updateScheduleExceptionDto: UpdateScheduleExceptionDto,
+    dto: UpdateScheduleExceptionDto,
   ) {
-    const currentException = await this.findOne(id);
+    const current =
+      await this.findOwnedException(
+        businessId,
+        id,
+      );
 
     const barberId =
-      updateScheduleExceptionDto.barberId ??
-      currentException.barberId;
-
-    await this.validateBarber(barberId);
+      dto.barberId ??
+      current.barberId;
 
     const date =
-      updateScheduleExceptionDto.date !== undefined
-        ? this.parseDate(updateScheduleExceptionDto.date)
-        : currentException.date;
+      dto.date !== undefined
+        ? this.parseDate(
+            dto.date,
+          )
+        : current.date;
 
     const isDayOff =
-      updateScheduleExceptionDto.isDayOff ??
-      currentException.isDayOff;
+      dto.isDayOff ??
+      current.isDayOff;
 
+    /*
+     * Si se transforma en día libre,
+     * anulamos automáticamente las horas.
+     */
     const startMinute =
-      updateScheduleExceptionDto.startMinute ??
-      currentException.startMinute ??
-      undefined;
+      isDayOff
+        ? undefined
+        : dto.startMinute ??
+          current.startMinute ??
+          undefined;
 
     const endMinute =
-      updateScheduleExceptionDto.endMinute ??
-      currentException.endMinute ??
-      undefined;
+      isDayOff
+        ? undefined
+        : dto.endMinute ??
+          current.endMinute ??
+          undefined;
 
-    this.validateExceptionData(
+    if (
+      dto.barberId !==
+      undefined
+    ) {
+      await this.validateBarber(
+        businessId,
+        dto.barberId,
+      );
+    }
+
+    this.validateExceptionConfiguration(
       isDayOff,
       startMinute,
       endMinute,
     );
 
     if (
-      updateScheduleExceptionDto.barberId !== undefined ||
-      updateScheduleExceptionDto.date !== undefined
+      barberId !==
+        current.barberId ||
+      date.getTime() !==
+        current.date.getTime()
     ) {
-      const duplicatedException =
-        await this.prisma.scheduleException.findFirst({
-          where: {
-            id: {
-              not: id,
-            },
-            barberId,
-            date,
-          },
-        });
-
-      if (duplicatedException) {
-        throw new ConflictException(
-          'Ya existe una excepción para este barbero en esa fecha',
-        );
-      }
+      await this.validateDuplicate(
+        barberId,
+        date,
+        id,
+      );
     }
 
     return this.prisma.scheduleException.update({
       where: {
-        id,
+        id: current.id,
       },
+
       data: {
-        ...(updateScheduleExceptionDto.barberId !==
+        ...(dto.barberId !==
           undefined && {
-          barberId: updateScheduleExceptionDto.barberId,
+          barberId:
+            dto.barberId,
         }),
 
-        ...(updateScheduleExceptionDto.date !== undefined && {
+        ...(dto.date !==
+          undefined && {
           date,
         }),
 
-        ...(updateScheduleExceptionDto.isDayOff !==
+        ...(dto.isDayOff !==
           undefined && {
-          isDayOff: updateScheduleExceptionDto.isDayOff,
+          isDayOff:
+            dto.isDayOff,
         }),
 
-        startMinute: isDayOff ? null : startMinute,
-        endMinute: isDayOff ? null : endMinute,
+        startMinute:
+          isDayOff
+            ? null
+            : startMinute!,
 
-        ...(updateScheduleExceptionDto.reason !==
+        endMinute:
+          isDayOff
+            ? null
+            : endMinute!,
+
+        ...(dto.reason !==
           undefined && {
-          reason: updateScheduleExceptionDto.reason,
+          reason:
+            dto.reason.trim() ||
+            null,
         }),
       },
+
       include: {
         barber: true,
       },
     });
   }
 
-  async remove(id: number) {
-    await this.findOne(id);
+  async remove(
+    businessId: number,
+    id: number,
+  ) {
+    const exception =
+      await this.findOwnedException(
+        businessId,
+        id,
+      );
 
+    /*
+     * ScheduleException no tiene
+     * deletedAt ni isActive en tu schema.
+     *
+     * Por lo tanto aquí sí hacemos
+     * eliminación física.
+     */
     return this.prisma.scheduleException.delete({
       where: {
-        id,
+        id:
+          exception.id,
       },
     });
   }
 
-  private async validateBarber(barberId: number) {
-    const barber = await this.prisma.barber.findFirst({
-      where: {
-        id: barberId,
-        deletedAt: null,
-        isActive: true,
-      },
-    });
+  private async validateBarber(
+    businessId: number,
+    barberId: number,
+  ) {
+    const barber =
+      await this.prisma.barber.findFirst({
+        where: {
+          id: barberId,
+          businessId,
+          isActive: true,
+          deletedAt: null,
+        },
+
+        select: {
+          id: true,
+        },
+      });
 
     if (!barber) {
       throw new NotFoundException(
-        `No se encontró un barbero activo con ID ${barberId}`,
+        'Barbero no encontrado.',
       );
     }
-
-    return barber;
   }
 
-  private validateExceptionData(
+  private validateExceptionConfiguration(
     isDayOff: boolean,
     startMinute?: number,
     endMinute?: number,
   ) {
     if (isDayOff) {
+      if (
+        startMinute !==
+          undefined ||
+        endMinute !==
+          undefined
+      ) {
+        throw new BadRequestException(
+          'Un día libre no debe tener horario de inicio ni término.',
+        );
+      }
+
       return;
     }
 
     if (
-      startMinute === undefined ||
-      endMinute === undefined
+      startMinute ===
+        undefined ||
+      endMinute ===
+        undefined
     ) {
       throw new BadRequestException(
-        'Debes indicar startMinute y endMinute cuando no es un día libre',
+        'Un horario especial debe tener hora de inicio y término.',
       );
     }
 
-    if (endMinute <= startMinute) {
+    if (
+      startMinute < 0 ||
+      startMinute > 1439
+    ) {
       throw new BadRequestException(
-        'La hora de término debe ser posterior a la hora de inicio',
+        'La hora de inicio no es válida.',
+      );
+    }
+
+    if (
+      endMinute < 1 ||
+      endMinute > 1440
+    ) {
+      throw new BadRequestException(
+        'La hora de término no es válida.',
+      );
+    }
+
+    if (
+      startMinute >=
+      endMinute
+    ) {
+      throw new BadRequestException(
+        'La hora de término debe ser posterior a la hora de inicio.',
       );
     }
   }
 
-  private parseDate(date: string) {
-    return new Date(`${date}T00:00:00.000Z`);
+  private async validateDuplicate(
+    barberId: number,
+    date: Date,
+    excludedId?: number,
+  ) {
+    const existing =
+      await this.prisma.scheduleException.findFirst({
+        where: {
+          barberId,
+          date,
+
+          ...(excludedId !==
+            undefined && {
+            id: {
+              not:
+                excludedId,
+            },
+          }),
+        },
+
+        select: {
+          id: true,
+        },
+      });
+
+    if (existing) {
+      throw new ConflictException(
+        'Ya existe una excepción de horario para este barbero en esa fecha.',
+      );
+    }
+  }
+
+  private async findOwnedException(
+    businessId: number,
+    id: number,
+  ) {
+    const exception =
+      await this.prisma.scheduleException.findFirst({
+        where: {
+          id,
+
+          barber: {
+            businessId,
+            deletedAt: null,
+          },
+        },
+
+        select: {
+          id: true,
+          barberId: true,
+          date: true,
+          isDayOff: true,
+          startMinute: true,
+          endMinute: true,
+          reason: true,
+        },
+      });
+
+    if (!exception) {
+      throw new NotFoundException(
+        'Excepción de horario no encontrada.',
+      );
+    }
+
+    return exception;
+  }
+
+  private parseDate(
+    date: string,
+  ) {
+    return new Date(
+      `${date}T00:00:00.000Z`,
+    );
   }
 }

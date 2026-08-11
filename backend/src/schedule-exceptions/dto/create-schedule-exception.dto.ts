@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 
@@ -17,9 +18,8 @@ export class CreateScheduleExceptionDto {
   @IsDateString()
   date!: string;
 
-  @IsOptional()
   @IsBoolean()
-  isDayOff?: boolean;
+  isDayOff!: boolean;
 
   @IsOptional()
   @IsInt()
@@ -36,5 +36,6 @@ export class CreateScheduleExceptionDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
+  @MaxLength(300)
   reason?: string;
 }

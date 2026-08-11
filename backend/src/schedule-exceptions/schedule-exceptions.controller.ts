@@ -18,26 +18,38 @@ import { UpdateScheduleExceptionDto } from './dto/update-schedule-exception.dto'
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+
+import type { AuthUser } from '../auth/interfaces/auth-user.interface';
 
 @Controller('schedule-exceptions')
 export class ScheduleExceptionsController {
   constructor(
-    private readonly scheduleExceptionsService: ScheduleExceptionsService,
+    private readonly scheduleExceptionsService:
+      ScheduleExceptionsService,
   ) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
   @Roles(
     UserRole.ADMIN,
     UserRole.RECEPTIONIST,
   )
   create(
+    @CurrentUser()
+    currentUser: AuthUser,
+
     @Body()
-    createScheduleExceptionDto: CreateScheduleExceptionDto,
+    dto: CreateScheduleExceptionDto,
   ) {
     return this.scheduleExceptionsService.create(
-      createScheduleExceptionDto,
+      currentUser.businessId,
+      dto,
     );
   }
 
@@ -46,46 +58,58 @@ export class ScheduleExceptionsController {
     return this.scheduleExceptionsService.findAll();
   }
 
-  @Get('barber/:barberId')
-  findByBarber(
-    @Param('barberId', ParseIntPipe)
-    barberId: number,
+  @Get(':id')
+  findOne(
+    @Param('id', ParseIntPipe)
+    id: number,
   ) {
-    return this.scheduleExceptionsService.findByBarber(
-      barberId,
+    return this.scheduleExceptionsService.findOne(
+      id,
     );
   }
 
-  @Get(':id')
-  findOne(
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    return this.scheduleExceptionsService.findOne(id);
-  }
-
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
   @Roles(
     UserRole.ADMIN,
     UserRole.RECEPTIONIST,
   )
   update(
-    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Param('id', ParseIntPipe)
+    id: number,
+
     @Body()
-    updateScheduleExceptionDto: UpdateScheduleExceptionDto,
+    dto: UpdateScheduleExceptionDto,
   ) {
     return this.scheduleExceptionsService.update(
+      currentUser.businessId,
       id,
-      updateScheduleExceptionDto,
+      dto,
     );
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(
+    JwtAuthGuard,
+    RolesGuard,
+  )
   @Roles(UserRole.ADMIN)
   remove(
-    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Param('id', ParseIntPipe)
+    id: number,
   ) {
-    return this.scheduleExceptionsService.remove(id);
+    return this.scheduleExceptionsService.remove(
+      currentUser.businessId,
+      id,
+    );
   }
 }

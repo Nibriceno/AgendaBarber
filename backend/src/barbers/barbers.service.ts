@@ -4,9 +4,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
-import { Prisma } from '@prisma/client';
+import {
+  Prisma,
+  UserRole,
+} from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+
 import { CreateBarberDto } from './dto/create-barber.dto';
 import { UpdateBarberDto } from './dto/update-barber.dto';
 
@@ -16,139 +20,75 @@ export class BarbersService {
     private readonly prisma: PrismaService,
   ) {}
 
-  private userSelect() {
-    return {
-      id: true,
-      businessId: true,
-      firstName: true,
-      lastName: true,
-      phone: true,
-      email: true,
-      role: true,
-      birthDate: true,
-      isRegistered: true,
-      isActive: true,
-      emailVerified: true,
-      phoneVerified: true,
-      lastLoginAt: true,
-      createdAt: true,
-      updatedAt: true,
-      deletedAt: true,
-    };
-  }
-
   async create(
-    createBarberDto: CreateBarberDto,
+    businessId: number,
+    dto: CreateBarberDto,
   ) {
-    const business =
-      await this.prisma.business.findFirst({
-        where: {
-          id: createBarberDto.businessId,
-          deletedAt: null,
-          isActive: true,
-        },
-      });
+    await this.validateBusiness(
+      businessId,
+    );
 
-    if (!business) {
-      throw new NotFoundException(
-        `No se encontró la barbería con ID ${createBarberDto.businessId}`,
+    if (dto.userId !== undefined) {
+      await this.validateBarberUser(
+        businessId,
+        dto.userId,
       );
     }
-
-    if (createBarberDto.userId !== undefined) {
-      await this.validateUser(
-        createBarberDto.userId,
-        createBarberDto.businessId,
-      );
-
-      const existingBarber =
-        await this.prisma.barber.findFirst({
-          where: {
-            userId: createBarberDto.userId,
-            deletedAt: null,
-          },
-        });
-
-      if (existingBarber) {
-        throw new ConflictException(
-          'Este usuario ya está asociado a un barbero',
-        );
-      }
-    }
-
-    const data: Prisma.BarberUncheckedCreateInput = {
-      businessId: createBarberDto.businessId,
-      displayName: createBarberDto.displayName,
-
-      ...(createBarberDto.userId !== undefined && {
-        userId: createBarberDto.userId,
-      }),
-
-      ...(createBarberDto.specialty !== undefined && {
-        specialty: createBarberDto.specialty,
-      }),
-
-      ...(createBarberDto.biography !== undefined && {
-        biography: createBarberDto.biography,
-      }),
-
-      ...(createBarberDto.photoUrl !== undefined && {
-        photoUrl: createBarberDto.photoUrl,
-      }),
-
-      ...(createBarberDto.calendarColor !== undefined && {
-        calendarColor:
-          createBarberDto.calendarColor,
-      }),
-
-      ...(createBarberDto.commissionPercentage !==
-        undefined && {
-        commissionPercentage:
-          createBarberDto.commissionPercentage,
-      }),
-
-      ...(createBarberDto.displayOrder !== undefined && {
-        displayOrder: createBarberDto.displayOrder,
-      }),
-
-      ...(createBarberDto.isActive !== undefined && {
-        isActive: createBarberDto.isActive,
-      }),
-    };
 
     return this.prisma.barber.create({
-      data,
-      include: {
-        business: true,
-        user: {
-          select: this.userSelect(),
-        },
+      data: {
+        businessId,
+
+        userId:
+          dto.userId ?? null,
+
+        displayName:
+          dto.displayName.trim(),
+
+        specialty:
+          dto.specialty?.trim() ??
+          null,
+
+        biography:
+          dto.biography?.trim() ??
+          null,
+
+        photoUrl:
+          dto.photoUrl?.trim() ??
+          null,
+
+        calendarColor:
+          dto.calendarColor?.trim() ??
+          null,
+
+        commissionPercentage:
+          dto.commissionPercentage !==
+          undefined
+            ? new Prisma.Decimal(
+                dto.commissionPercentage,
+              )
+            : null,
+
+        displayOrder:
+          dto.displayOrder ?? 0,
+
+        isActive:
+          dto.isActive ?? true,
       },
+
+      select: this.barberSelect(),
     });
   }
 
-  findAll() {
+  async findAll() {
     return this.prisma.barber.findMany({
       where: {
         deletedAt: null,
         isActive: true,
       },
-      include: {
-        business: true,
 
-        user: {
-          select: this.userSelect(),
-        },
+      select: this.barberSelect(),
 
-        services: {
-          where: {
-            isActive: true,
-          },
-          include: {
-            service: true,
-          },
-        },
-      },
       orderBy: [
         {
           displayOrder: 'asc',
@@ -160,42 +100,23 @@ export class BarbersService {
     });
   }
 
-  async findOne(id: number) {
+  async findOne(
+    id: number,
+  ) {
     const barber =
       await this.prisma.barber.findFirst({
         where: {
           id,
           deletedAt: null,
+          isActive: true,
         },
-        include: {
-          business: true,
 
-          user: {
-            select: this.userSelect(),
-          },
-
-          services: {
-            where: {
-              isActive: true,
-            },
-            include: {
-              service: true,
-            },
-          },
-
-          schedules: {
-            where: {
-              isActive: true,
-            },
-          },
-
-          scheduleExceptions: true,
-        },
+        select: this.barberSelect(),
       });
 
     if (!barber) {
       throw new NotFoundException(
-        `No se encontró el barbero con ID ${id}`,
+        'Barbero no encontrado.',
       );
     }
 
@@ -203,171 +124,245 @@ export class BarbersService {
   }
 
   async update(
+    businessId: number,
     id: number,
-    updateBarberDto: UpdateBarberDto,
+    dto: UpdateBarberDto,
   ) {
-    const currentBarber =
-      await this.findOne(id);
-
-    const businessId =
-      updateBarberDto.businessId ??
-      currentBarber.businessId;
-
-    const userId =
-      updateBarberDto.userId ??
-      currentBarber.userId;
-
-    if (
-      updateBarberDto.businessId !== undefined
-    ) {
-      const business =
-        await this.prisma.business.findFirst({
-          where: {
-            id: updateBarberDto.businessId,
-            deletedAt: null,
-            isActive: true,
-          },
-        });
-
-      if (!business) {
-        throw new NotFoundException(
-          `No se encontró la barbería con ID ${updateBarberDto.businessId}`,
-        );
-      }
-    }
-
-    if (
-      userId !== null &&
-      (updateBarberDto.userId !== undefined ||
-        updateBarberDto.businessId !== undefined)
-    ) {
-      await this.validateUser(
-        userId,
+    const barber =
+      await this.findOwnedBarber(
         businessId,
+        id,
+      );
+
+    if (dto.userId !== undefined) {
+      await this.validateBarberUser(
+        businessId,
+        dto.userId,
+        id,
       );
     }
 
-    if (
-      updateBarberDto.userId !== undefined
-    ) {
-      const existingBarber =
-        await this.prisma.barber.findFirst({
-          where: {
-            id: {
-              not: id,
-            },
-            userId: updateBarberDto.userId,
-            deletedAt: null,
-          },
-        });
-
-      if (existingBarber) {
-        throw new ConflictException(
-          'Este usuario ya está asociado a otro barbero',
-        );
-      }
-    }
-
-    const data: Prisma.BarberUncheckedUpdateInput = {
-      ...(updateBarberDto.businessId !== undefined && {
-        businessId: updateBarberDto.businessId,
-      }),
-
-      ...(updateBarberDto.userId !== undefined && {
-        userId: updateBarberDto.userId,
-      }),
-
-      ...(updateBarberDto.displayName !== undefined && {
-        displayName: updateBarberDto.displayName,
-      }),
-
-      ...(updateBarberDto.specialty !== undefined && {
-        specialty: updateBarberDto.specialty,
-      }),
-
-      ...(updateBarberDto.biography !== undefined && {
-        biography: updateBarberDto.biography,
-      }),
-
-      ...(updateBarberDto.photoUrl !== undefined && {
-        photoUrl: updateBarberDto.photoUrl,
-      }),
-
-      ...(updateBarberDto.calendarColor !== undefined && {
-        calendarColor:
-          updateBarberDto.calendarColor,
-      }),
-
-      ...(updateBarberDto.commissionPercentage !==
-        undefined && {
-        commissionPercentage:
-          updateBarberDto.commissionPercentage,
-      }),
-
-      ...(updateBarberDto.displayOrder !== undefined && {
-        displayOrder:
-          updateBarberDto.displayOrder,
-      }),
-
-      ...(updateBarberDto.isActive !== undefined && {
-        isActive: updateBarberDto.isActive,
-      }),
-    };
-
     return this.prisma.barber.update({
       where: {
-        id,
+        id: barber.id,
       },
-      data,
-      include: {
-        business: true,
-        user: {
-          select: this.userSelect(),
-        },
+
+      data: {
+        ...(dto.userId !== undefined && {
+          userId: dto.userId,
+        }),
+
+        ...(dto.displayName !== undefined && {
+          displayName:
+            dto.displayName.trim(),
+        }),
+
+        ...(dto.specialty !== undefined && {
+          specialty:
+            dto.specialty.trim() ||
+            null,
+        }),
+
+        ...(dto.biography !== undefined && {
+          biography:
+            dto.biography.trim() ||
+            null,
+        }),
+
+        ...(dto.photoUrl !== undefined && {
+          photoUrl:
+            dto.photoUrl.trim() ||
+            null,
+        }),
+
+        ...(dto.calendarColor !==
+          undefined && {
+          calendarColor:
+            dto.calendarColor.trim() ||
+            null,
+        }),
+
+        ...(dto.commissionPercentage !==
+          undefined && {
+          commissionPercentage:
+            new Prisma.Decimal(
+              dto.commissionPercentage,
+            ),
+        }),
+
+        ...(dto.displayOrder !==
+          undefined && {
+          displayOrder:
+            dto.displayOrder,
+        }),
+
+        ...(dto.isActive !==
+          undefined && {
+          isActive:
+            dto.isActive,
+        }),
       },
+
+      select: this.barberSelect(),
     });
   }
 
-  async remove(id: number) {
-    await this.findOne(id);
+  async remove(
+    businessId: number,
+    id: number,
+  ) {
+    const barber =
+      await this.findOwnedBarber(
+        businessId,
+        id,
+      );
 
     return this.prisma.barber.update({
       where: {
-        id,
+        id: barber.id,
       },
+
       data: {
         isActive: false,
         deletedAt: new Date(),
       },
-      include: {
-        business: true,
-        user: {
-          select: this.userSelect(),
-        },
-      },
+
+      select: this.barberSelect(),
     });
   }
 
-  private async validateUser(
-    userId: number,
+  private async validateBusiness(
     businessId: number,
+  ) {
+    const business =
+      await this.prisma.business.findFirst({
+        where: {
+          id: businessId,
+          deletedAt: null,
+          isActive: true,
+        },
+
+        select: {
+          id: true,
+        },
+      });
+
+    if (!business) {
+      throw new NotFoundException(
+        'Barbería no encontrada o inactiva.',
+      );
+    }
+  }
+
+  private async validateBarberUser(
+    businessId: number,
+    userId: number,
+    excludedBarberId?: number,
   ) {
     const user =
       await this.prisma.user.findFirst({
         where: {
           id: userId,
           businessId,
-          deletedAt: null,
+          role: UserRole.BARBER,
           isActive: true,
+          deletedAt: null,
+        },
+
+        select: {
+          id: true,
         },
       });
 
     if (!user) {
       throw new NotFoundException(
-        `No se encontró un usuario activo con ID ${userId} en esta barbería`,
+        'Usuario barbero no encontrado.',
       );
     }
 
-    return user;
+    const existingBarber =
+      await this.prisma.barber.findFirst({
+        where: {
+          userId,
+          deletedAt: null,
+
+          ...(excludedBarberId !==
+            undefined && {
+            id: {
+              not:
+                excludedBarberId,
+            },
+          }),
+        },
+
+        select: {
+          id: true,
+        },
+      });
+
+    if (existingBarber) {
+      throw new ConflictException(
+        'Este usuario ya está asociado a otro barbero.',
+      );
+    }
+  }
+
+  private async findOwnedBarber(
+    businessId: number,
+    id: number,
+  ) {
+    const barber =
+      await this.prisma.barber.findFirst({
+        where: {
+          id,
+          businessId,
+          deletedAt: null,
+        },
+
+        select: {
+          id: true,
+        },
+      });
+
+    if (!barber) {
+      throw new NotFoundException(
+        'Barbero no encontrado.',
+      );
+    }
+
+    return barber;
+  }
+
+  private barberSelect(): Prisma.BarberSelect {
+    return {
+      id: true,
+      businessId: true,
+      userId: true,
+
+      displayName: true,
+      specialty: true,
+      biography: true,
+      photoUrl: true,
+      calendarColor: true,
+      commissionPercentage: true,
+      displayOrder: true,
+      isActive: true,
+
+      createdAt: true,
+      updatedAt: true,
+      deletedAt: true,
+
+      user: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          email: true,
+          role: true,
+          isActive: true,
+        },
+      },
+    };
   }
 }

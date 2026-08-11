@@ -3,7 +3,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+
+import {
+  Prisma,
+} from '@prisma/client';
+
 import { PrismaService } from '../prisma/prisma.service';
+
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 
@@ -13,72 +19,85 @@ export class ServicesService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async create(createServiceDto: CreateServiceDto) {
-    const business = await this.prisma.business.findFirst({
-      where: {
-        id: createServiceDto.businessId,
-        deletedAt: null,
-        isActive: true,
-      },
-    });
+  async create(
+    businessId: number,
+    dto: CreateServiceDto,
+  ) {
+    await this.validateBusiness(
+      businessId,
+    );
 
-    if (!business) {
-      throw new NotFoundException(
-        `Business with ID ${createServiceDto.businessId} not found`,
-      );
-    }
+    await this.validateCategory(
+      businessId,
+      dto.categoryId,
+    );
 
-    const category = await this.prisma.category.findFirst({
-      where: {
-        id: createServiceDto.categoryId,
-        businessId: createServiceDto.businessId,
-        deletedAt: null,
-        isActive: true,
-      },
-    });
-
-    if (!category) {
-      throw new NotFoundException(
-        `Category with ID ${createServiceDto.categoryId} not found`,
-      );
-    }
-
-    const existingService = await this.prisma.service.findFirst({
-      where: {
-        businessId: createServiceDto.businessId,
-        name: {
-          equals: createServiceDto.name,
-          mode: 'insensitive',
-        },
-        deletedAt: null,
-      },
-    });
-
-    if (existingService) {
-      throw new ConflictException(
-        'A service with this name already exists',
-      );
-    }
+    await this.validateDuplicatedName(
+      businessId,
+      dto.name,
+    );
 
     return this.prisma.service.create({
-      data: createServiceDto,
+      data: {
+        businessId,
+
+        categoryId:
+          dto.categoryId,
+
+        name:
+          dto.name.trim(),
+
+        description:
+          dto.description?.trim() ??
+          null,
+
+        durationMinutes:
+          dto.durationMinutes,
+
+        bufferBefore:
+          dto.bufferBefore ?? 0,
+
+        bufferAfter:
+          dto.bufferAfter ?? 0,
+
+        price:
+          new Prisma.Decimal(
+            dto.price,
+          ),
+
+        displayOrder:
+          dto.displayOrder ?? 0,
+
+        isActive:
+          dto.isActive ?? true,
+      },
+
       include: {
         category: true,
-        business: true,
       },
     });
   }
 
-  findAll() {
+  async findAll() {
+    /*
+     * TEMPORAL:
+     * Tenemos una sola barbería.
+     *
+     * Cuando implementemos la API
+     * pública multi-tenant, esta ruta
+     * se reemplazará por una basada
+     * en business slug.
+     */
     return this.prisma.service.findMany({
       where: {
         deletedAt: null,
         isActive: true,
       },
+
       include: {
         category: true,
-        business: true,
       },
+
       orderBy: [
         {
           displayOrder: 'asc',
@@ -90,21 +109,25 @@ export class ServicesService {
     });
   }
 
-  async findOne(id: number) {
-    const service = await this.prisma.service.findFirst({
-      where: {
-        id,
-        deletedAt: null,
-      },
-      include: {
-        category: true,
-        business: true,
-      },
-    });
+  async findOne(
+    id: number,
+  ) {
+    const service =
+      await this.prisma.service.findFirst({
+        where: {
+          id,
+          deletedAt: null,
+          isActive: true,
+        },
+
+        include: {
+          category: true,
+        },
+      });
 
     if (!service) {
       throw new NotFoundException(
-        `Service with ID ${id} not found`,
+        'Servicio no encontrado.',
       );
     }
 
@@ -112,93 +135,258 @@ export class ServicesService {
   }
 
   async update(
+    businessId: number,
     id: number,
-    updateServiceDto: UpdateServiceDto,
+    dto: UpdateServiceDto,
   ) {
-    const currentService = await this.findOne(id);
+    const currentService =
+      await this.findOwnedService(
+        businessId,
+        id,
+      );
 
-    const businessId =
-      updateServiceDto.businessId ?? currentService.businessId;
-
-    if (updateServiceDto.businessId) {
-      const business = await this.prisma.business.findFirst({
-        where: {
-          id: updateServiceDto.businessId,
-          deletedAt: null,
-          isActive: true,
-        },
-      });
-
-      if (!business) {
-        throw new NotFoundException(
-          `Business with ID ${updateServiceDto.businessId} not found`,
-        );
-      }
+    if (
+      dto.categoryId !==
+      undefined
+    ) {
+      await this.validateCategory(
+        businessId,
+        dto.categoryId,
+      );
     }
 
-    if (updateServiceDto.categoryId) {
-      const category = await this.prisma.category.findFirst({
-        where: {
-          id: updateServiceDto.categoryId,
-          businessId,
-          deletedAt: null,
-          isActive: true,
-        },
-      });
-
-      if (!category) {
-        throw new NotFoundException(
-          `Category with ID ${updateServiceDto.categoryId} not found`,
-        );
-      }
-    }
-
-    if (updateServiceDto.name) {
-      const duplicatedService =
-        await this.prisma.service.findFirst({
-          where: {
-            id: {
-              not: id,
-            },
-            businessId,
-            name: {
-              equals: updateServiceDto.name,
-              mode: 'insensitive',
-            },
-            deletedAt: null,
-          },
-        });
-
-      if (duplicatedService) {
-        throw new ConflictException(
-          'A service with this name already exists',
-        );
-      }
+    if (
+      dto.name !== undefined
+    ) {
+      await this.validateDuplicatedName(
+        businessId,
+        dto.name,
+        id,
+      );
     }
 
     return this.prisma.service.update({
       where: {
-        id,
+        id:
+          currentService.id,
       },
-      data: updateServiceDto,
+
+      data: {
+        ...(dto.categoryId !==
+          undefined && {
+          categoryId:
+            dto.categoryId,
+        }),
+
+        ...(dto.name !==
+          undefined && {
+          name:
+            dto.name.trim(),
+        }),
+
+        ...(dto.description !==
+          undefined && {
+          description:
+            dto.description.trim() ||
+            null,
+        }),
+
+        ...(dto.durationMinutes !==
+          undefined && {
+          durationMinutes:
+            dto.durationMinutes,
+        }),
+
+        ...(dto.bufferBefore !==
+          undefined && {
+          bufferBefore:
+            dto.bufferBefore,
+        }),
+
+        ...(dto.bufferAfter !==
+          undefined && {
+          bufferAfter:
+            dto.bufferAfter,
+        }),
+
+        ...(dto.price !==
+          undefined && {
+          price:
+            new Prisma.Decimal(
+              dto.price,
+            ),
+        }),
+
+        ...(dto.displayOrder !==
+          undefined && {
+          displayOrder:
+            dto.displayOrder,
+        }),
+
+        ...(dto.isActive !==
+          undefined && {
+          isActive:
+            dto.isActive,
+        }),
+      },
+
       include: {
         category: true,
-        business: true,
       },
     });
   }
 
-  async remove(id: number) {
-    await this.findOne(id);
+  async remove(
+    businessId: number,
+    id: number,
+  ) {
+    const service =
+      await this.findOwnedService(
+        businessId,
+        id,
+      );
 
+    /*
+     * Soft delete.
+     *
+     * No borramos físicamente porque
+     * puede existir historial de
+     * reservas asociado al servicio.
+     */
     return this.prisma.service.update({
       where: {
-        id,
+        id:
+          service.id,
       },
+
       data: {
         isActive: false,
         deletedAt: new Date(),
       },
+
+      include: {
+        category: true,
+      },
     });
+  }
+
+  private async findOwnedService(
+    businessId: number,
+    id: number,
+  ) {
+    const service =
+      await this.prisma.service.findFirst({
+        where: {
+          id,
+          businessId,
+          deletedAt: null,
+        },
+
+        select: {
+          id: true,
+          businessId: true,
+          categoryId: true,
+          name: true,
+        },
+      });
+
+    if (!service) {
+      /*
+       * No decimos si el ID existe
+       * en otra barbería.
+       *
+       * Esto evita filtrar información
+       * entre tenants.
+       */
+      throw new NotFoundException(
+        'Servicio no encontrado.',
+      );
+    }
+
+    return service;
+  }
+
+  private async validateBusiness(
+    businessId: number,
+  ) {
+    const business =
+      await this.prisma.business.findFirst({
+        where: {
+          id: businessId,
+          deletedAt: null,
+          isActive: true,
+        },
+
+        select: {
+          id: true,
+        },
+      });
+
+    if (!business) {
+      throw new NotFoundException(
+        'Barbería no encontrada o inactiva.',
+      );
+    }
+  }
+
+  private async validateCategory(
+    businessId: number,
+    categoryId: number,
+  ) {
+    const category =
+      await this.prisma.category.findFirst({
+        where: {
+          id: categoryId,
+          businessId,
+          deletedAt: null,
+          isActive: true,
+        },
+
+        select: {
+          id: true,
+        },
+      });
+
+    if (!category) {
+      throw new NotFoundException(
+        'Categoría no encontrada.',
+      );
+    }
+  }
+
+  private async validateDuplicatedName(
+    businessId: number,
+    name: string,
+    excludedServiceId?: number,
+  ) {
+    const normalizedName =
+      name.trim();
+
+    const existingService =
+      await this.prisma.service.findFirst({
+        where: {
+          businessId,
+          name: normalizedName,
+          deletedAt: null,
+
+          ...(excludedServiceId !==
+            undefined && {
+            id: {
+              not:
+                excludedServiceId,
+            },
+          }),
+        },
+
+        select: {
+          id: true,
+        },
+      });
+
+    if (existingService) {
+      throw new ConflictException(
+        'Ya existe un servicio con este nombre.',
+      );
+    }
   }
 }
