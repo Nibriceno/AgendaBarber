@@ -43,7 +43,6 @@ type RegisterResponse = {
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
-
     private readonly jwtService: JwtService,
   ) {}
 
@@ -62,6 +61,25 @@ export class AuthService {
           isActive: true,
           deletedAt: null,
           isRegistered: true,
+        },
+
+        /*
+         * passwordHash está oculto globalmente
+         * en PrismaService.
+         *
+         * El login es uno de los pocos lugares
+         * donde necesitamos solicitarlo
+         * explícitamente.
+         */
+        select: {
+          id: true,
+          businessId: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          email: true,
+          role: true,
+          passwordHash: true,
         },
       });
 
@@ -101,6 +119,9 @@ export class AuthService {
     return {
       accessToken,
 
+      /*
+       * passwordHash NO se devuelve.
+       */
       user: {
         id: user.id,
         businessId:

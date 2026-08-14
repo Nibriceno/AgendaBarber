@@ -34,15 +34,15 @@ enum DayOfWeek {
 }
 
 model Business {
-  id       Int    @id @default(autoincrement())
+  id       Int     @id @default(autoincrement())
   name     String
-  slug     String @unique
+  slug     String  @unique
   phone    String?
   email    String?
   address  String?
   logoUrl  String?
-  timezone String @default("America/Santiago")
-  currency String @default("CLP")
+  timezone String  @default("America/Santiago")
+  currency String  @default("CLP")
 
   appointmentInterval Int @default(15)
   minimumAdvanceTime  Int @default(60)
@@ -50,6 +50,9 @@ model Business {
 
   cancellationMinimumMinutes Int @default(120)
   rescheduleMinimumMinutes   Int @default(120)
+
+  barberStartEarlyMinutes Int @default(15)
+  noShowGraceMinutes      Int @default(15)
 
   isActive  Boolean   @default(true)
   createdAt DateTime  @default(now())
@@ -237,6 +240,8 @@ model Appointment {
   internalNotes String?
 
   confirmationCode String @unique
+
+  managementTokenHash String? @unique @db.VarChar(64)
 
   confirmedAt DateTime?
   startedAt   DateTime?

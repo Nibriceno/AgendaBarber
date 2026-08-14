@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -20,6 +19,7 @@ import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
 import { ClientRescheduleAppointmentDto } from './dto/client-reschedule-appointment.dto';
 import { ClientCancelAppointmentDto } from './dto/client-cancel-appointment.dto';
 import { BarberUpdateStatusDto } from './dto/barber-update-status.dto';
+import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -227,6 +227,31 @@ export class AppointmentsController {
     );
   }
 
+  @Patch(':id/cancel')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
+  cancel(
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Param(
+      'id',
+      ParseIntPipe,
+    )
+    id: number,
+
+    @Body()
+    dto: CancelAppointmentDto,
+  ) {
+    return this.appointmentsService.cancelAuthorized(
+      id,
+      dto,
+      currentUser,
+    );
+  }
+
   @Get(':id')
   @Roles(
     UserRole.ADMIN,
@@ -271,27 +296,6 @@ export class AppointmentsController {
     return this.appointmentsService.updateAuthorized(
       id,
       dto,
-      currentUser,
-    );
-  }
-
-  @Delete(':id')
-  @Roles(
-    UserRole.ADMIN,
-    UserRole.RECEPTIONIST,
-  )
-  remove(
-    @CurrentUser()
-    currentUser: AuthUser,
-
-    @Param(
-      'id',
-      ParseIntPipe,
-    )
-    id: number,
-  ) {
-    return this.appointmentsService.removeAuthorized(
-      id,
       currentUser,
     );
   }

@@ -11,7 +11,7 @@ import {
   Prisma,
   UserRole,
 } from '@prisma/client';
-import { randomUUID } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -19,7 +19,27 @@ import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
 import { AuthUser } from '../auth/interfaces/auth-user.interface';
 import { ClientRescheduleAppointmentDto } from './dto/client-reschedule-appointment.dto';
 import { BarberUpdateStatusDto } from './dto/barber-update-status.dto';
+import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
 
+
+
+type PrismaClientLike =
+  | PrismaService
+  | Prisma.TransactionClient;
+
+type GuestCustomerInput = {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email?: string;
+};
+
+type GuestAppointmentInput = {
+  barberId: number;
+  serviceIds: number[];
+  startAt: string;
+  customerNotes?: string;
+};
 
 @Injectable()
 export class AppointmentsService {
@@ -199,36 +219,28 @@ async findMyBarberAppointments(
     );
   }
 
-  async removeAuthorized(
-    id: number,
-    currentUser: AuthUser,
-  ) {
-    await this.findOneAuthorized(
-      id,
-      currentUser,
-    );
-
-    return this.remove(
-      currentUser.businessId,
-      id,
-      currentUser,
-    );
-  }
-
-
   async create(
     currentUser: AuthUser,
     createAppointmentDto: CreateAppointmentDto,
   ) {
-    const businessId = currentUser.businessId;
+    const canCreateAppointment =
+      currentUser.role === UserRole.ADMIN ||
+      currentUser.role === UserRole.RECEPTIONIST ||
+      currentUser.role === UserRole.CLIENT;
 
-    const business = await this.validateBusiness(
-      businessId,
-    );
+    if (!canCreateAppointment) {
+      throw new ForbiddenException(
+        'No tienes permiso para crear reservas.',
+      );
+    }
 
     let customerId: number;
 
     if (currentUser.role === UserRole.CLIENT) {
+      /*
+       * Un CLIENT autenticado siempre reserva para sí mismo.
+       * Aunque intentara enviar customerId en el body, no se usa.
+       */
       customerId = currentUser.id;
     } else {
       if (createAppointmentDto.customerId === undefined) {
@@ -240,28 +252,109 @@ async findMyBarberAppointments(
       customerId = createAppointmentDto.customerId;
     }
 
+    const canApplyDiscount =
+      currentUser.role === UserRole.ADMIN ||
+      currentUser.role === UserRole.RECEPTIONIST;
+
+    return this.createAppointmentForCustomer({
+      businessId: currentUser.businessId,
+      customerId,
+      historyActorId: currentUser.id,
+      historyComment: 'Reserva creada',
+      canApplyDiscount,
+      createAppointmentDto,
+    });
+  }
+
+  private async createAppointmentForCustomer({
+    businessId,
+    customerId,
+    historyActorId,
+    historyComment,
+    canApplyDiscount,
+    createAppointmentDto,
+    managementTokenHash,
+  }: {
+    businessId: number;
+    customerId: number;
+    historyActorId: number | null;
+    historyComment: string;
+    canApplyDiscount: boolean;
+    createAppointmentDto: CreateAppointmentDto;
+    managementTokenHash?: string;
+  }) {
+    /*
+     * Toda la creación se ejecuta dentro de una transacción
+     * Serializable. Así las validaciones y escrituras observan
+     * un estado consistente y mantenemos la protección
+     * anti-overbooking en una única ruta.
+     */
+    return this.runSerializableTransaction(
+      async (transaction) =>
+        this.createAppointmentForCustomerInTransaction({
+          transaction,
+          businessId,
+          customerId,
+          historyActorId,
+          historyComment,
+          canApplyDiscount,
+          createAppointmentDto,
+          managementTokenHash,
+        }),
+    );
+  }
+
+  private async createAppointmentForCustomerInTransaction({
+    transaction,
+    businessId,
+    customerId,
+    historyActorId,
+    historyComment,
+    canApplyDiscount,
+    createAppointmentDto,
+    managementTokenHash,
+  }: {
+    transaction: Prisma.TransactionClient;
+    businessId: number;
+    customerId: number;
+    historyActorId: number | null;
+    historyComment: string;
+    canApplyDiscount: boolean;
+    createAppointmentDto: CreateAppointmentDto;
+    managementTokenHash?: string;
+  }) {
+    const business = await this.validateBusiness(
+      businessId,
+      transaction,
+    );
+
     await this.validateCustomer(
       customerId,
       businessId,
+      transaction,
     );
 
     const barber = await this.validateBarber(
       createAppointmentDto.barberId,
       businessId,
+      transaction,
     );
 
     const serviceIds = [
       ...new Set(createAppointmentDto.serviceIds),
     ];
 
-    if (serviceIds.length !== createAppointmentDto.serviceIds.length) {
+    if (
+      serviceIds.length !==
+      createAppointmentDto.serviceIds.length
+    ) {
       throw new BadRequestException(
         'No puedes seleccionar el mismo servicio más de una vez',
       );
     }
 
     const barberServices =
-      await this.prisma.barberService.findMany({
+      await transaction.barberService.findMany({
         where: {
           barberId: barber.id,
           serviceId: {
@@ -341,10 +434,6 @@ async findMyBarberAppointments(
       },
     );
 
-    const canApplyDiscount =
-      currentUser.role === UserRole.ADMIN ||
-      currentUser.role === UserRole.RECEPTIONIST;
-
     const discountAmount = new Prisma.Decimal(
       canApplyDiscount
         ? createAppointmentDto.discountAmount ?? 0
@@ -414,74 +503,77 @@ async findMyBarberAppointments(
       endAt,
       business.timezone,
       business.appointmentInterval,
+      transaction,
+    );
+
+    await this.validateOverlap(
+      businessId,
+      barber.id,
+      startAt,
+      endAt,
+      undefined,
+      transaction,
     );
 
     const confirmationCode =
       this.generateConfirmationCode();
 
-    return this.runSerializableTransaction(
-      async (transaction) => {
-        await this.validateOverlap(
+    const appointment =
+      await transaction.appointment.create({
+        data: {
           businessId,
-          barber.id,
+          customerId,
+          barberId: barber.id,
           startAt,
           endAt,
-          undefined,
-          transaction,
-        );
+          status: AppointmentStatus.PENDING,
+          totalDurationMinutes,
+          subtotal,
+          discountAmount,
+          totalPrice,
+          customerNotes:
+            createAppointmentDto.customerNotes,
+          internalNotes:
+            canApplyDiscount
+              ? createAppointmentDto.internalNotes
+              : null,
+          confirmationCode,
+          ...(managementTokenHash !== undefined && {
+            managementTokenHash,
+          }),
+        },
+      });
 
-        const appointment =
-          await transaction.appointment.create({
-            data: {
-              businessId,
-              customerId,
-              barberId: barber.id,
-              startAt,
-              endAt,
-              status: AppointmentStatus.PENDING,
-              totalDurationMinutes,
-              subtotal,
-              discountAmount,
-              totalPrice,
-              customerNotes:
-                createAppointmentDto.customerNotes,
-              internalNotes:
-                canApplyDiscount
-                  ? createAppointmentDto.internalNotes
-                  : null,
-              confirmationCode,
-            },
-          });
+    await transaction.appointmentService.createMany({
+      data: appointmentServices.map(
+        (service) => ({
+          appointmentId: appointment.id,
+          ...service,
+        }),
+      ),
+    });
 
-        await transaction.appointmentService.createMany(
-          {
-            data: appointmentServices.map(
-              (service) => ({
-                appointmentId: appointment.id,
-                ...service,
-              }),
-            ),
-          },
-        );
-
-        await transaction.appointmentHistory.create({
-          data: {
-            appointmentId: appointment.id,
-            actorId: currentUser.id,
-            previousStatus: null,
-            newStatus: AppointmentStatus.PENDING,
-            comment: 'Reserva creada',
-          },
-        });
-
-        return transaction.appointment.findUnique({
-          where: {
-            id: appointment.id,
-          },
-          include: this.appointmentInclude(),
-        });
+    await transaction.appointmentHistory.create({
+      data: {
+        appointmentId: appointment.id,
+        actorId: historyActorId,
+        previousStatus: null,
+        newStatus: AppointmentStatus.PENDING,
+        comment: historyComment,
       },
-    );
+    });
+
+    /*
+     * La reserva acaba de crearse dentro de esta misma
+     * transacción. Por eso un resultado null sería una
+     * inconsistencia y usamos findUniqueOrThrow.
+     */
+    return transaction.appointment.findUniqueOrThrow({
+      where: {
+        id: appointment.id,
+      },
+      include: this.appointmentInclude(),
+    });
   }
 
   findAll(businessId: number) {
@@ -600,57 +692,62 @@ async findMyBarberAppointments(
       );
     }
 
+    const now = new Date();
+
     return this.prisma.$transaction(async (transaction) => {
-      const updatedAppointment =
-        await transaction.appointment.update({
-          where: {
-            id,
-          },
-          data: {
-            ...(updateAppointmentDto.status !== undefined && {
-              status: updateAppointmentDto.status,
-            }),
+      await this.updateAppointmentOptimistically(
+        transaction,
+        {
+          id,
+          businessId,
+          status: currentAppointment.status,
+          deletedAt: null,
+        },
+        {
+          ...(updateAppointmentDto.status !== undefined && {
+            status: updateAppointmentDto.status,
+          }),
 
-            ...(updateAppointmentDto.customerNotes !== undefined && {
-              customerNotes: updateAppointmentDto.customerNotes,
-            }),
+          ...(updateAppointmentDto.customerNotes !== undefined && {
+            customerNotes: updateAppointmentDto.customerNotes,
+          }),
 
-            ...(updateAppointmentDto.internalNotes !== undefined && {
-              internalNotes: updateAppointmentDto.internalNotes,
-            }),
+          ...(updateAppointmentDto.internalNotes !== undefined && {
+            internalNotes: updateAppointmentDto.internalNotes,
+          }),
 
-            ...(updateAppointmentDto.cancellationReason !== undefined && {
-              cancellationReason:
-                updateAppointmentDto.cancellationReason,
-            }),
+          ...(updateAppointmentDto.cancellationReason !== undefined && {
+            cancellationReason:
+              updateAppointmentDto.cancellationReason,
+          }),
 
-            ...(updateAppointmentDto.status ===
-              AppointmentStatus.CONFIRMED && {
-              confirmedAt: new Date(),
-            }),
+          ...(updateAppointmentDto.status ===
+            AppointmentStatus.CONFIRMED && {
+            confirmedAt: now,
+          }),
 
-            ...(updateAppointmentDto.status ===
-              AppointmentStatus.IN_PROGRESS && {
-              startedAt: new Date(),
-            }),
+          ...(updateAppointmentDto.status ===
+            AppointmentStatus.IN_PROGRESS && {
+            startedAt: now,
+          }),
 
-            ...(updateAppointmentDto.status ===
-              AppointmentStatus.COMPLETED && {
-              completedAt: new Date(),
-            }),
+          ...(updateAppointmentDto.status ===
+            AppointmentStatus.COMPLETED && {
+            completedAt: now,
+          }),
 
-            ...(updateAppointmentDto.status ===
-              AppointmentStatus.CANCELLED && {
-              cancelledAt: new Date(),
-              cancelledById: currentUser.id,
-            }),
+          ...(updateAppointmentDto.status ===
+            AppointmentStatus.CANCELLED && {
+            cancelledAt: now,
+            cancelledById: currentUser.id,
+          }),
 
-            ...(updateAppointmentDto.status ===
-              AppointmentStatus.NO_SHOW && {
-              noShowAt: new Date(),
-            }),
-          },
-        });
+          ...(updateAppointmentDto.status ===
+            AppointmentStatus.NO_SHOW && {
+            noShowAt: now,
+          }),
+        },
+      );
 
       if (
         updateAppointmentDto.status !== undefined &&
@@ -670,9 +767,9 @@ async findMyBarberAppointments(
         });
       }
 
-      return transaction.appointment.findUnique({
+      return transaction.appointment.findUniqueOrThrow({
         where: {
-          id: updatedAppointment.id,
+          id,
         },
         include: this.appointmentInclude(),
       });
@@ -915,11 +1012,15 @@ async findMyBarberAppointments(
           transaction,
         );
 
-        await transaction.appointment.update({
-          where: {
+        await this.updateAppointmentOptimistically(
+          transaction,
+          {
             id,
+            businessId,
+            status: currentAppointment.status,
+            deletedAt: null,
           },
-          data: {
+          {
             barberId: barber.id,
             startAt,
             endAt,
@@ -928,7 +1029,7 @@ async findMyBarberAppointments(
             discountAmount,
             totalPrice,
           },
-        });
+        );
 
         await transaction.appointmentService.deleteMany(
           {
@@ -971,78 +1072,22 @@ async findMyBarberAppointments(
     );
   }
 
-  async remove(
-    businessId: number,
-    id: number,
-    currentUser: AuthUser,
+  private async updateAppointmentOptimistically(
+    transaction: Prisma.TransactionClient,
+    where: Prisma.AppointmentWhereInput,
+    data: Prisma.AppointmentUpdateManyArgs['data'],
   ) {
-    const appointment =
-      await this.findOne(
-        businessId,
-        id,
-      );
+    const result =
+      await transaction.appointment.updateMany({
+        where,
+        data,
+      });
 
-    if (
-      appointment.status ===
-      AppointmentStatus.COMPLETED
-    ) {
-      throw new BadRequestException(
-        'No se puede cancelar una reserva completada',
+    if (result.count !== 1) {
+      throw new ConflictException(
+        'La reserva cambió mientras se procesaba la solicitud. Recarga los datos e inténtalo nuevamente.',
       );
     }
-
-    if (
-      appointment.status ===
-      AppointmentStatus.CANCELLED
-    ) {
-      throw new BadRequestException(
-        'La reserva ya está cancelada',
-      );
-    }
-
-    return this.prisma.$transaction(
-      async (transaction) => {
-        const updated =
-          await transaction.appointment.update({
-            where: {
-              id,
-            },
-            data: {
-              status:
-                AppointmentStatus.CANCELLED,
-              cancellationReason:
-                appointment.cancellationReason ??
-                'Reserva cancelada',
-              cancelledAt:
-                new Date(),
-              cancelledById:
-                currentUser.id,
-              deletedAt:
-                new Date(),
-            },
-            include:
-              this.appointmentInclude(),
-          });
-
-        await transaction.appointmentHistory.create({
-          data: {
-            appointmentId:
-              id,
-            actorId:
-              currentUser.id,
-            previousStatus:
-              appointment.status,
-            newStatus:
-              AppointmentStatus.CANCELLED,
-            comment:
-              updated.cancellationReason ??
-              'Reserva cancelada',
-          },
-        });
-
-        return updated;
-      },
-    );
   }
 
   private validateStatusTransition(
@@ -1088,9 +1133,10 @@ async findMyBarberAppointments(
 
   private async validateBusiness(
     businessId: number,
+    prismaClient: PrismaClientLike = this.prisma,
   ) {
     const business =
-      await this.prisma.business.findFirst({
+      await prismaClient.business.findFirst({
         where: {
           id: businessId,
           isActive: true,
@@ -1110,9 +1156,10 @@ async findMyBarberAppointments(
   private async validateCustomer(
     customerId: number,
     businessId: number,
+    prismaClient: PrismaClientLike = this.prisma,
   ) {
     const customer =
-      await this.prisma.user.findFirst({
+      await prismaClient.user.findFirst({
         where: {
           id: customerId,
           businessId,
@@ -1134,9 +1181,10 @@ async findMyBarberAppointments(
   private async validateBarber(
     barberId: number,
     businessId: number,
+    prismaClient: PrismaClientLike = this.prisma,
   ) {
     const barber =
-      await this.prisma.barber.findFirst({
+      await prismaClient.barber.findFirst({
         where: {
           id: barberId,
           businessId,
@@ -1160,6 +1208,7 @@ async findMyBarberAppointments(
     endAt: Date,
     timezone: string,
     appointmentInterval: number,
+    prismaClient: PrismaClientLike = this.prisma,
   ) {
     const startData =
       this.getLocalDateData(
@@ -1194,7 +1243,7 @@ async findMyBarberAppointments(
     );
 
     const exception =
-      await this.prisma.scheduleException.findFirst({
+      await prismaClient.scheduleException.findFirst({
         where: {
           barberId,
           date: exceptionDate,
@@ -1232,7 +1281,7 @@ async findMyBarberAppointments(
     }
 
     const schedule =
-      await this.prisma.schedule.findFirst({
+      await prismaClient.schedule.findFirst({
         where: {
           barberId,
           dayOfWeek:
@@ -1360,6 +1409,13 @@ async findMyBarberAppointments(
       .slice(0, 10)
       .toUpperCase();
   }
+
+  private hashManagementToken(token: string) {
+    return createHash('sha256')
+      .update(token, 'utf8')
+      .digest('hex');
+  }
+
   private async runSerializableTransaction<T>(
   operation: (
     transaction: Prisma.TransactionClient,
@@ -1614,16 +1670,20 @@ async rescheduleClient(
         transaction,
       );
 
-      await transaction.appointment.update({
-        where: {
+      await this.updateAppointmentOptimistically(
+        transaction,
+        {
           id: appointment.id,
+          businessId: currentUser.businessId,
+          customerId: currentUser.id,
+          status: appointment.status,
+          deletedAt: null,
         },
-
-        data: {
+        {
           startAt,
           endAt,
         },
-      });
+      );
 
       await transaction.appointmentHistory.create({
         data: {
@@ -1644,7 +1704,7 @@ async rescheduleClient(
         },
       });
 
-      return transaction.appointment.findUnique({
+      return transaction.appointment.findUniqueOrThrow({
         where: {
           id: appointment.id,
         },
@@ -1673,9 +1733,8 @@ async cancelClient(
     );
 
   if (
-    appointment.status === AppointmentStatus.COMPLETED ||
-    appointment.status === AppointmentStatus.CANCELLED ||
-    appointment.status === AppointmentStatus.NO_SHOW
+    appointment.status !== AppointmentStatus.PENDING &&
+    appointment.status !== AppointmentStatus.CONFIRMED
   ) {
     throw new BadRequestException(
       'Esta reserva ya no puede ser cancelada.',
@@ -1702,34 +1761,26 @@ async cancelClient(
     );
   }
 
+  const cancellationReason = reason.trim();
+
   return this.prisma.$transaction(
     async (transaction) => {
-      const updated =
-        await transaction.appointment.update({
-          where: {
-            id: appointment.id,
-          },
-
-          data: {
-            status:
-              AppointmentStatus.CANCELLED,
-
-            cancellationReason:
-              reason.trim(),
-
-            cancelledAt:
-              now,
-
-            cancelledById:
-              currentUser.id,
-
-            deletedAt:
-              now,
-          },
-
-          include:
-            this.appointmentInclude(),
-        });
+      await this.updateAppointmentOptimistically(
+        transaction,
+        {
+          id: appointment.id,
+          businessId: currentUser.businessId,
+          customerId: currentUser.id,
+          status: appointment.status,
+          deletedAt: null,
+        },
+        {
+          status: AppointmentStatus.CANCELLED,
+          cancellationReason,
+          cancelledAt: now,
+          cancelledById: currentUser.id,
+        },
+      );
 
       await transaction.appointmentHistory.create({
         data: {
@@ -1746,14 +1797,22 @@ async cancelClient(
             AppointmentStatus.CANCELLED,
 
           comment:
-            reason.trim(),
+            cancellationReason,
         },
       });
 
-      return updated;
+        return transaction.appointment.findUniqueOrThrow({
+          where: {
+            id: appointment.id,
+          },
+
+          include:
+            this.appointmentInclude(),
+        });
     },
   );
 }
+
 async updateBarberStatus(
   id: number,
   dto: BarberUpdateStatusDto,
@@ -1773,7 +1832,6 @@ async updateBarberStatus(
         isActive: true,
         deletedAt: null,
       },
-
       select: {
         id: true,
       },
@@ -1793,7 +1851,6 @@ async updateBarberStatus(
         barberId: barber.id,
         deletedAt: null,
       },
-
       include:
         this.appointmentInclude(),
     });
@@ -1822,43 +1879,100 @@ async updateBarberStatus(
     dto.status,
   );
 
+  const business =
+    await this.validateBusiness(
+      currentUser.businessId,
+    );
+
   const now = new Date();
+
+  /*
+   * CONFIRMED -> IN_PROGRESS
+   *
+   * El barbero puede iniciar la atención
+   * solo dentro de la ventana permitida.
+   */
+  if (
+    dto.status === AppointmentStatus.IN_PROGRESS
+  ) {
+    const earliestStart =
+      new Date(
+        appointment.startAt.getTime() -
+          business.barberStartEarlyMinutes *
+            60_000,
+      );
+
+    if (now < earliestStart) {
+      throw new BadRequestException(
+        `La atención solo puede iniciarse hasta ${business.barberStartEarlyMinutes} minutos antes de la hora reservada.`,
+      );
+    }
+
+    if (now >= appointment.endAt) {
+      throw new BadRequestException(
+        'La hora de esta reserva ya finalizó. No puede iniciarse la atención.',
+      );
+    }
+  }
+
+  /*
+   * CONFIRMED -> NO_SHOW
+   *
+   * El cliente solo puede marcarse como
+   * ausente después del período de gracia.
+   */
+  if (
+    dto.status === AppointmentStatus.NO_SHOW
+  ) {
+    const noShowAvailableAt =
+      new Date(
+        appointment.startAt.getTime() +
+          business.noShowGraceMinutes *
+            60_000,
+      );
+
+    if (now < noShowAvailableAt) {
+      throw new BadRequestException(
+        `El cliente solo puede marcarse como ausente después de ${business.noShowGraceMinutes} minutos desde la hora de la reserva.`,
+      );
+    }
+  }
 
   return this.prisma.$transaction(
     async (transaction) => {
-      const updated =
-        await transaction.appointment.update({
-          where: {
-            id: appointment.id,
-          },
+      await this.updateAppointmentOptimistically(
+        transaction,
+        {
+          id: appointment.id,
+          businessId: currentUser.businessId,
+          barberId: barber.id,
+          status: appointment.status,
+          deletedAt: null,
+        },
+        {
+          status: dto.status,
 
-          data: {
-            status: dto.status,
+          ...(dto.status ===
+            AppointmentStatus.CONFIRMED && {
+            confirmedAt: now,
+          }),
 
-            ...(dto.status ===
-              AppointmentStatus.CONFIRMED && {
-              confirmedAt: now,
-            }),
+          ...(dto.status ===
+            AppointmentStatus.IN_PROGRESS && {
+            startedAt: now,
+          }),
 
-            ...(dto.status ===
-              AppointmentStatus.IN_PROGRESS && {
-              startedAt: now,
-            }),
+          ...(dto.status ===
+            AppointmentStatus.COMPLETED && {
+            completedAt: now,
+          }),
 
-            ...(dto.status ===
-              AppointmentStatus.COMPLETED && {
-              completedAt: now,
-            }),
-
-            ...(dto.status ===
-              AppointmentStatus.NO_SHOW && {
-              noShowAt: now,
-            }),
-          },
-
-          include:
-            this.appointmentInclude(),
-        });
+          ...(dto.status ===
+            AppointmentStatus.NO_SHOW && {
+            noShowAt: now,
+          }),
+        },
+      );
 
       await transaction.appointmentHistory.create({
         data: {
@@ -1879,8 +1993,643 @@ async updateBarberStatus(
         },
       });
 
-      return updated;
+      return transaction.appointment.findUniqueOrThrow({
+        where: {
+          id: appointment.id,
+        },
+        include:
+          this.appointmentInclude(),
+      });
     },
   );
 }
+
+async cancelAuthorized(
+  id: number,
+  dto: CancelAppointmentDto,
+  currentUser: AuthUser,
+) {
+  if (
+    currentUser.role !== UserRole.ADMIN &&
+    currentUser.role !== UserRole.RECEPTIONIST
+  ) {
+    throw new ForbiddenException(
+      'No tienes permiso para cancelar administrativamente esta reserva.',
+    );
+  }
+
+  const appointment =
+    await this.findOne(
+      currentUser.businessId,
+      id,
+    );
+
+  if (
+    appointment.status !== AppointmentStatus.PENDING &&
+    appointment.status !== AppointmentStatus.CONFIRMED
+  ) {
+    throw new BadRequestException(
+      'Esta reserva ya no puede ser cancelada.',
+    );
+  }
+
+  const now =
+    new Date();
+
+  const reason =
+    dto.reason.trim();
+
+  return this.prisma.$transaction(
+    async (transaction) => {
+      await this.updateAppointmentOptimistically(
+        transaction,
+        {
+          id: appointment.id,
+          businessId: currentUser.businessId,
+          status: appointment.status,
+          deletedAt: null,
+        },
+        {
+          status: AppointmentStatus.CANCELLED,
+          cancellationReason: reason,
+          cancelledAt: now,
+          cancelledById: currentUser.id,
+        },
+      );
+
+      await transaction.appointmentHistory.create({
+        data: {
+          appointmentId:
+            appointment.id,
+
+          actorId:
+            currentUser.id,
+
+          previousStatus:
+            appointment.status,
+
+          newStatus:
+            AppointmentStatus.CANCELLED,
+
+          comment:
+            reason,
+        },
+      });
+
+      return transaction.appointment.findUnique({
+        where: {
+          id: appointment.id,
+        },
+
+        include:
+          this.appointmentInclude(),
+      });
+    },
+  );
+}
+async rescheduleForGuest(
+  businessId: number,
+  id: number,
+  startAtInput: string,
+) {
+  /*
+   * Esta operación solo se invoca después de que
+   * PublicBookingService valida confirmationCode +
+   * X-Booking-Token.
+   *
+   * Aun así, volvemos a limitar la consulta por tenant
+   * y exigimos que sea realmente una reserva guest.
+   */
+  const appointment =
+    await this.prisma.appointment.findFirst({
+      where: {
+        id,
+        businessId,
+        managementTokenHash: {
+          not: null,
+        },
+        deletedAt: null,
+      },
+
+      select: {
+        id: true,
+        status: true,
+        startAt: true,
+        barberId: true,
+        totalDurationMinutes: true,
+      },
+    });
+
+  if (!appointment) {
+    throw new NotFoundException(
+      'Reserva no encontrada.',
+    );
+  }
+
+  if (
+    appointment.status !== AppointmentStatus.PENDING &&
+    appointment.status !== AppointmentStatus.CONFIRMED
+  ) {
+    throw new BadRequestException(
+      'Esta reserva ya no puede ser reprogramada.',
+    );
+  }
+
+  const business =
+    await this.validateBusiness(
+      businessId,
+    );
+
+  const now = new Date();
+
+  /*
+   * El invitado debe respetar la misma política de
+   * anticipación que un CLIENT autenticado.
+   */
+  const rescheduleDeadline =
+    new Date(
+      appointment.startAt.getTime() -
+        business.rescheduleMinimumMinutes *
+          60_000,
+    );
+
+  if (now > rescheduleDeadline) {
+    throw new BadRequestException(
+      `La reserva solo puede reprogramarse con al menos ${business.rescheduleMinimumMinutes} minutos de anticipación.`,
+    );
+  }
+
+  const startAt =
+    new Date(startAtInput);
+
+  if (
+    Number.isNaN(
+      startAt.getTime(),
+    )
+  ) {
+    throw new BadRequestException(
+      'La fecha de inicio no es válida.',
+    );
+  }
+
+  const minimumStartAt =
+    new Date(
+      now.getTime() +
+        business.minimumAdvanceTime *
+          60_000,
+    );
+
+  if (startAt < minimumStartAt) {
+    throw new BadRequestException(
+      `La nueva fecha debe tener al menos ${business.minimumAdvanceTime} minutos de anticipación.`,
+    );
+  }
+
+  const maximumStartAt =
+    new Date(
+      now.getTime() +
+        business.maximumAdvanceDays *
+          24 *
+          60 *
+          60 *
+          1000,
+    );
+
+  if (startAt > maximumStartAt) {
+    throw new BadRequestException(
+      `La reserva no puede superar los ${business.maximumAdvanceDays} días de anticipación.`,
+    );
+  }
+
+  const endAt =
+    new Date(
+      startAt.getTime() +
+        appointment.totalDurationMinutes *
+          60_000,
+    );
+
+  await this.validateSchedule(
+    appointment.barberId,
+    startAt,
+    endAt,
+    business.timezone,
+    business.appointmentInterval,
+  );
+
+  return this.runSerializableTransaction(
+    async (transaction) => {
+      await this.validateOverlap(
+        businessId,
+        appointment.barberId,
+        startAt,
+        endAt,
+        appointment.id,
+        transaction,
+      );
+
+      /*
+       * La condición de estado evita que una reprogramación
+       * guest sobrescriba una cancelación/cambio de estado
+       * simultáneo realizado por otro actor.
+       */
+      await this.updateAppointmentOptimistically(
+        transaction,
+        {
+          id: appointment.id,
+          businessId,
+          status: appointment.status,
+          managementTokenHash: {
+            not: null,
+          },
+          deletedAt: null,
+        },
+        {
+          startAt,
+          endAt,
+        },
+      );
+
+      await transaction.appointmentHistory.create({
+        data: {
+          appointmentId: appointment.id,
+          actorId: null,
+          previousStatus: appointment.status,
+          newStatus: appointment.status,
+          comment: 'Reserva reprogramada por invitado',
+        },
+      });
+
+      return transaction.appointment.findUniqueOrThrow({
+        where: {
+          id: appointment.id,
+        },
+        include: this.appointmentInclude(),
+      });
+    },
+  );
+}
+
+async cancelForGuest(
+  businessId: number,
+  id: number,
+  reason: string,
+) {
+  /*
+   * Esta operación solo se invoca después de que
+   * PublicBookingService valida confirmationCode +
+   * X-Booking-Token.
+   *
+   * Aun así, volvemos a limitar la consulta por tenant
+   * y exigimos que la reserva tenga managementTokenHash.
+   */
+  const appointment =
+    await this.prisma.appointment.findFirst({
+      where: {
+        id,
+        businessId,
+        managementTokenHash: {
+          not: null,
+        },
+        deletedAt: null,
+      },
+
+      select: {
+        id: true,
+        status: true,
+        startAt: true,
+      },
+    });
+
+  if (!appointment) {
+    throw new NotFoundException(
+      'Reserva no encontrada.',
+    );
+  }
+
+  if (
+    appointment.status !== AppointmentStatus.PENDING &&
+    appointment.status !== AppointmentStatus.CONFIRMED
+  ) {
+    throw new BadRequestException(
+      'Esta reserva ya no puede ser cancelada.',
+    );
+  }
+
+  const business =
+    await this.validateBusiness(
+      businessId,
+    );
+
+  const now = new Date();
+
+  const cancellationDeadline =
+    new Date(
+      appointment.startAt.getTime() -
+        business.cancellationMinimumMinutes *
+          60_000,
+    );
+
+  if (now > cancellationDeadline) {
+    throw new BadRequestException(
+      `La reserva solo puede cancelarse con al menos ${business.cancellationMinimumMinutes} minutos de anticipación.`,
+    );
+  }
+
+  const cancellationReason =
+    reason.trim();
+
+  if (!cancellationReason) {
+    throw new BadRequestException(
+      'Debes indicar el motivo de cancelación.',
+    );
+  }
+
+  return this.prisma.$transaction(
+    async (transaction) => {
+      /*
+       * La condición de estado evita que una cancelación
+       * guest sobrescriba una operación simultánea de
+       * ADMIN, RECEPTIONIST o BARBER.
+       */
+      await this.updateAppointmentOptimistically(
+        transaction,
+        {
+          id: appointment.id,
+          businessId,
+          status: appointment.status,
+          managementTokenHash: {
+            not: null,
+          },
+          deletedAt: null,
+        },
+        {
+          status: AppointmentStatus.CANCELLED,
+          cancellationReason,
+          cancelledAt: now,
+
+          /*
+           * No existe un User autenticado detrás de esta
+           * operación pública.
+           */
+          cancelledById: null,
+        },
+      );
+
+      await transaction.appointmentHistory.create({
+        data: {
+          appointmentId: appointment.id,
+          actorId: null,
+          previousStatus: appointment.status,
+          newStatus: AppointmentStatus.CANCELLED,
+          comment: cancellationReason,
+        },
+      });
+
+      return transaction.appointment.findUniqueOrThrow({
+        where: {
+          id: appointment.id,
+        },
+        include: this.appointmentInclude(),
+      });
+    },
+  );
+}
+
+async createForGuest(
+  businessId: number,
+  guest: GuestCustomerInput,
+  dto: GuestAppointmentInput,
+) {
+  const normalizedGuest = {
+    firstName: guest.firstName.trim(),
+    lastName: guest.lastName.trim(),
+    phone: guest.phone.trim(),
+    email:
+      guest.email
+        ?.trim()
+        .toLowerCase(),
+  };
+
+  if (
+    !normalizedGuest.firstName ||
+    !normalizedGuest.lastName ||
+    !normalizedGuest.phone
+  ) {
+    throw new BadRequestException(
+      'Los datos del cliente invitado no son válidos.',
+    );
+  }
+
+  const createAppointmentDto: CreateAppointmentDto = {
+    barberId: dto.barberId,
+    serviceIds: dto.serviceIds,
+    startAt: dto.startAt,
+
+    ...(dto.customerNotes !== undefined && {
+      customerNotes: dto.customerNotes.trim(),
+    }),
+  };
+
+  /*
+   * Token secreto de gestión para reservas guest.
+   *
+   * - 32 bytes aleatorios = 256 bits de entropía.
+   * - El token real se devuelve una sola vez al cliente.
+   * - PostgreSQL guarda únicamente SHA-256(token).
+   */
+  const managementToken = randomBytes(32)
+    .toString('base64url');
+
+  const managementTokenHash =
+    this.hashManagementToken(managementToken);
+
+  try {
+    /*
+     * Cliente invitado + reserva forman una sola unidad atómica.
+     *
+     * Si cualquier validación o escritura posterior falla,
+     * PostgreSQL revierte también la creación del User guest.
+     */
+    const appointment =
+      await this.runSerializableTransaction(
+      async (transaction) => {
+        await this.validateBusiness(
+          businessId,
+          transaction,
+        );
+
+        const customer =
+          await this.resolveGuestCustomerForBooking(
+            transaction,
+            businessId,
+            normalizedGuest,
+          );
+
+        return this.createAppointmentForCustomerInTransaction({
+          transaction,
+          businessId,
+          customerId: customer.id,
+
+          /*
+           * No existe un usuario autenticado que haya ejecutado
+           * esta acción. AppointmentHistory.actorId es nullable,
+           * por lo que registramos correctamente actorId = null.
+           */
+          historyActorId: null,
+          historyComment: 'Reserva creada como invitado',
+          canApplyDiscount: false,
+          createAppointmentDto,
+          managementTokenHash,
+        });
+      },
+    );
+
+    return {
+      ...appointment,
+      managementToken,
+    };
+  } catch (error) {
+    /*
+     * Dos solicitudes concurrentes podrían intentar crear
+     * el mismo guest. La constraint UNIQUE sigue siendo
+     * la autoridad final. No exponemos detalles de Prisma.
+     */
+    if (
+      error instanceof
+        Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      throw new ConflictException(
+        'No es posible realizar una reserva con estos datos.',
+      );
+    }
+
+    throw error;
+  }
+}
+
+private async resolveGuestCustomerForBooking(
+  transaction: Prisma.TransactionClient,
+  businessId: number,
+  guest: {
+    firstName: string;
+    lastName: string;
+    phone: string;
+    email?: string;
+  },
+) {
+  /*
+   * Buscamos por teléfono sin filtrar inicialmente por rol.
+   * Así un teléfono de ADMIN/BARBER nunca puede reutilizarse
+   * silenciosamente como identidad de cliente guest.
+   */
+  const existingByPhone =
+    await transaction.user.findFirst({
+      where: {
+        businessId,
+        phone: guest.phone,
+        deletedAt: null,
+      },
+
+      select: {
+        id: true,
+        role: true,
+        email: true,
+        isRegistered: true,
+        isActive: true,
+      },
+    });
+
+  if (existingByPhone) {
+    if (
+      existingByPhone.role !==
+      UserRole.CLIENT
+    ) {
+      throw new ConflictException(
+        'No es posible realizar una reserva con estos datos.',
+      );
+    }
+
+    if (!existingByPhone.isActive) {
+      throw new ConflictException(
+        'No es posible realizar una reserva con estos datos.',
+      );
+    }
+
+    /*
+     * Una identidad registrada debe utilizar autenticación
+     * o, en el futuro, un mecanismo OTP. Una petición pública
+     * anónima no puede crear reservas sobre esa cuenta.
+     */
+    if (existingByPhone.isRegistered) {
+      throw new ConflictException(
+        'No es posible realizar una reserva con estos datos.',
+      );
+    }
+
+    if (
+      guest.email &&
+      existingByPhone.email &&
+      existingByPhone.email.toLowerCase() !==
+        guest.email
+    ) {
+      throw new ConflictException(
+        'No es posible realizar una reserva con estos datos.',
+      );
+    }
+
+    return {
+      id: existingByPhone.id,
+    };
+  }
+
+  /*
+   * Si no existe el teléfono, impedimos que el email
+   * reutilice otra identidad del mismo tenant.
+   */
+  if (guest.email) {
+    const existingByEmail =
+      await transaction.user.findFirst({
+        where: {
+          businessId,
+          email: guest.email,
+          deletedAt: null,
+        },
+
+        select: {
+          id: true,
+        },
+      });
+
+    if (existingByEmail) {
+      throw new ConflictException(
+        'No es posible realizar una reserva con estos datos.',
+      );
+    }
+  }
+
+  /*
+   * La creación ocurre dentro de la misma transacción
+   * Serializable que la reserva.
+   */
+  return transaction.user.create({
+    data: {
+      businessId,
+      firstName: guest.firstName,
+      lastName: guest.lastName,
+      phone: guest.phone,
+      email: guest.email ?? null,
+      role: UserRole.CLIENT,
+      isRegistered: false,
+      isActive: true,
+      emailVerified: false,
+      phoneVerified: false,
+    },
+
+    select: {
+      id: true,
+    },
+  });
+}
+
 }

@@ -6,6 +6,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 
+import {
+  Throttle,
+} from '@nestjs/throttler';
+
 import { AuthService } from './auth.service';
 
 import { LoginDto } from './dto/login.dto';
@@ -23,6 +27,21 @@ export class AuthController {
     private readonly authService: AuthService,
   ) {}
 
+  /*
+   * LOGIN
+   *
+   * Protección contra fuerza bruta:
+   * máximo 5 intentos por minuto por IP.
+   *
+   * Tanto credenciales correctas como incorrectas
+   * consumen intentos.
+   */
+  @Throttle({
+    default: {
+      limit: 5,
+      ttl: 60_000,
+    },
+  })
   @Post('login')
   login(
     @Body()
@@ -33,6 +52,18 @@ export class AuthController {
     );
   }
 
+  /*
+   * REGISTRO
+   *
+   * También lo limitamos porque es un endpoint
+   * público que escribe en la base de datos.
+   */
+  @Throttle({
+    default: {
+      limit: 3,
+      ttl: 60_000,
+    },
+  })
   @Post('register')
   register(
     @Body()
@@ -43,6 +74,11 @@ export class AuthController {
     );
   }
 
+  /*
+   * Usuario autenticado actual.
+   *
+   * Sigue protegido mediante JWT.
+   */
   @Get('me')
   @UseGuards(JwtAuthGuard)
   me(
