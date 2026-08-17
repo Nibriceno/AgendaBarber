@@ -1,11 +1,17 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 
 import { JwtService } from '@nestjs/jwt';
-import { UserRole } from '@prisma/client';
+
+import {
+  Prisma,
+  UserRole,
+} from '@prisma/client';
+
 import * as bcrypt from 'bcrypt';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -49,14 +55,48 @@ export class AuthService {
   async login(
     loginDto: LoginDto,
   ): Promise<LoginResponse> {
+    const normalizedBusinessSlug =
+      loginDto.businessSlug
+        .trim()
+        .toLowerCase();
+
     const normalizedEmail =
       loginDto.email
         .trim()
         .toLowerCase();
 
+    const business =
+      await this.prisma.business.findFirst({
+        where: {
+          slug: normalizedBusinessSlug,
+          isActive: true,
+          deletedAt: null,
+        },
+
+        select: {
+          id: true,
+        },
+      });
+
+    /*
+     * Mantenemos un mensaje genérico.
+     *
+     * No revelamos si:
+     * - el tenant no existe,
+     * - el usuario no existe,
+     * - está desactivado,
+     * - la contraseña es incorrecta.
+     */
+    if (!business) {
+      throw new UnauthorizedException(
+        'Credenciales incorrectas',
+      );
+    }
+
     const user =
       await this.prisma.user.findFirst({
         where: {
+          businessId: business.id,
           email: normalizedEmail,
           isActive: true,
           deletedAt: null,
@@ -64,12 +104,11 @@ export class AuthService {
         },
 
         /*
-         * passwordHash está oculto globalmente
-         * en PrismaService.
+         * passwordHash está omitido
+         * globalmente mediante PrismaService.
          *
-         * El login es uno de los pocos lugares
-         * donde necesitamos solicitarlo
-         * explícitamente.
+         * Login lo solicita explícitamente
+         * porque es necesario para bcrypt.
          */
         select: {
           id: true,
@@ -108,7 +147,8 @@ export class AuthService {
       sub: user.id,
       businessId:
         user.businessId,
-      role: user.role,
+      role:
+        user.role,
     };
 
     const accessToken =
@@ -119,9 +159,6 @@ export class AuthService {
     return {
       accessToken,
 
-      /*
-       * passwordHash NO se devuelve.
-       */
       user: {
         id: user.id,
         businessId:
@@ -130,9 +167,12 @@ export class AuthService {
           user.firstName,
         lastName:
           user.lastName,
-        phone: user.phone,
-        email: user.email,
-        role: user.role,
+        phone:
+          user.phone,
+        email:
+          user.email,
+        role:
+          user.role,
       },
     };
   }
@@ -140,18 +180,54 @@ export class AuthService {
   async register(
     registerDto: RegisterDto,
   ): Promise<RegisterResponse> {
+    const normalizedBusinessSlug =
+      registerDto.businessSlug
+        .trim()
+        .toLowerCase();
+
     const normalizedEmail =
       registerDto.email
         .trim()
         .toLowerCase();
 
     const normalizedPhone =
-      registerDto.phone.trim();
+      registerDto.phone
+        .trim();
 
+    /*
+     * El frontend entrega el slug público.
+     *
+     * Nunca permitimos que el cliente
+     * entregue directamente businessId.
+     */
+    const business =
+      await this.prisma.business.findFirst({
+        where: {
+          slug: normalizedBusinessSlug,
+          isActive: true,
+          deletedAt: null,
+        },
+
+        select: {
+          id: true,
+        },
+      });
+
+    if (!business) {
+      throw new BadRequestException(
+        'No es posible completar el registro.',
+      );
+    }
+
+    /*
+     * Email y teléfono se verifican
+     * únicamente dentro del tenant actual.
+     */
     const existingUser =
       await this.prisma.user.findFirst({
         where: {
-          businessId: 1,
+          businessId:
+            business.id,
 
           OR: [
             {
@@ -184,47 +260,77 @@ export class AuthService {
         12,
       );
 
-    const user =
-      await this.prisma.user.create({
-        data: {
-          businessId: 1,
+    try {
+      const user =
+        await this.prisma.user.create({
+          data: {
+            businessId:
+              business.id,
 
-          firstName:
-            registerDto.firstName
-              .trim(),
+            firstName:
+              registerDto.firstName
+                .trim(),
 
-          lastName:
-            registerDto.lastName
-              .trim(),
+            lastName:
+              registerDto.lastName
+                .trim(),
 
-          phone:
-            normalizedPhone,
+            phone:
+              normalizedPhone,
 
-          email:
-            normalizedEmail,
+            email:
+              normalizedEmail,
 
-          passwordHash,
+            passwordHash,
 
-          role:
-            UserRole.CLIENT,
+            /*
+             * Registro público nunca puede
+             * crear ADMIN, BARBER ni
+             * RECEPTIONIST.
+             */
+            role:
+              UserRole.CLIENT,
 
-          isRegistered: true,
-          isActive: true,
-        },
+            isRegistered: true,
+            isActive: true,
+          },
 
-        select: {
-          id: true,
-          businessId: true,
-          firstName: true,
-          lastName: true,
-          phone: true,
-          email: true,
-          role: true,
-          isActive: true,
-          createdAt: true,
-        },
-      });
+          select: {
+            id: true,
+            businessId: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            email: true,
+            role: true,
+            isActive: true,
+            createdAt: true,
+          },
+        });
 
-    return user;
+      return user;
+    } catch (error) {
+      /*
+       * Protege también contra condiciones
+       * de carrera:
+       *
+       * dos registros iguales podrían pasar
+       * el findFirst casi simultáneamente.
+       *
+       * La restricción UNIQUE de PostgreSQL
+       * es la última línea de defensa.
+       */
+      if (
+        error instanceof
+          Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'Ya existe una cuenta con esos datos.',
+        );
+      }
+
+      throw error;
+    }
   }
 }

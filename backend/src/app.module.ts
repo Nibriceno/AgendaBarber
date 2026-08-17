@@ -1,10 +1,21 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+
+import {
+  APP_GUARD,
+} from '@nestjs/core';
+
+import {
+  ConfigModule,
+} from '@nestjs/config';
 
 import {
   ThrottlerGuard,
   ThrottlerModule,
 } from '@nestjs/throttler';
+
+import {
+  validateEnvironment,
+} from './config/env.validation';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { BusinessesModule } from './businesses/businesses.module';
@@ -20,14 +31,28 @@ import { AvailabilityModule } from './availability/availability.module';
 import { AuthModule } from './auth/auth.module';
 import { PublicBookingModule } from './public-booking/public-booking.module';
 
+
+
 @Module({
   imports: [
     /*
+     * Configuración global.
+     *
+     * Carga .env y valida las variables
+     * necesarias antes de iniciar la API.
+     */
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validate:
+        validateEnvironment,
+    }),
+
+    /*
      * Rate limiting global.
      *
-     * Este será el límite por defecto para
-     * cualquier endpoint que no tenga un
-     * @Throttle() más específico.
+     * Los endpoints sensibles pueden
+     * sobrescribir este límite mediante
+     * @Throttle().
      */
     ThrottlerModule.forRoot({
       throttlers: [
@@ -54,14 +79,18 @@ import { PublicBookingModule } from './public-booking/public-booking.module';
     PublicBookingModule,
   ],
 
-  /*
-   * El guard global es lo que realmente
-   * ejecuta el rate limiting.
-   */
+
   providers: [
+    /*
+     * Activa realmente el rate limiting
+     * de forma global.
+     */
     {
-      provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      provide:
+        APP_GUARD,
+
+      useClass:
+        ThrottlerGuard,
     },
   ],
 })
