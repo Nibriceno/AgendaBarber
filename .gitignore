@@ -1,14 +1,22 @@
+# Dependencies
 node_modules/
+
+# Builds
 dist/
+coverage/
+
+# Environment variables
 .env
 .env.*
 !.env.example
+!.env.docker.example
 
+# Logs
 *.log
 
+# Editors
 .vscode/
 .idea/
 
-backend/node_modules/
-backend/dist/
-backend/.env
+# Docker local environment
+.env.docker
