@@ -24,9 +24,7 @@ export class BarbersService {
     businessId: number,
     dto: CreateBarberDto,
   ) {
-    await this.validateBusiness(
-      businessId,
-    );
+    await this.validateBusiness(businessId);
 
     if (dto.userId !== undefined) {
       await this.validateBarberUser(
@@ -46,24 +44,19 @@ export class BarbersService {
           dto.displayName.trim(),
 
         specialty:
-          dto.specialty?.trim() ??
-          null,
+          dto.specialty?.trim() || null,
 
         biography:
-          dto.biography?.trim() ??
-          null,
+          dto.biography?.trim() || null,
 
         photoUrl:
-          dto.photoUrl?.trim() ??
-          null,
+          dto.photoUrl?.trim() || null,
 
         calendarColor:
-          dto.calendarColor?.trim() ??
-          null,
+          dto.calendarColor?.trim() || null,
 
         commissionPercentage:
-          dto.commissionPercentage !==
-          undefined
+          dto.commissionPercentage !== undefined
             ? new Prisma.Decimal(
                 dto.commissionPercentage,
               )
@@ -80,9 +73,14 @@ export class BarbersService {
     });
   }
 
-  async findAll() {
+  async findAll(
+    businessId: number,
+  ) {
+    await this.validateBusiness(businessId);
+
     return this.prisma.barber.findMany({
       where: {
+        businessId,
         deletedAt: null,
         isActive: true,
       },
@@ -101,12 +99,14 @@ export class BarbersService {
   }
 
   async findOne(
+    businessId: number,
     id: number,
   ) {
     const barber =
       await this.prisma.barber.findFirst({
         where: {
           id,
+          businessId,
           deletedAt: null,
           isActive: true,
         },
@@ -159,45 +159,37 @@ export class BarbersService {
 
         ...(dto.specialty !== undefined && {
           specialty:
-            dto.specialty.trim() ||
-            null,
+            dto.specialty.trim() || null,
         }),
 
         ...(dto.biography !== undefined && {
           biography:
-            dto.biography.trim() ||
-            null,
+            dto.biography.trim() || null,
         }),
 
         ...(dto.photoUrl !== undefined && {
           photoUrl:
-            dto.photoUrl.trim() ||
-            null,
+            dto.photoUrl.trim() || null,
         }),
 
-        ...(dto.calendarColor !==
-          undefined && {
+        ...(dto.calendarColor !== undefined && {
           calendarColor:
-            dto.calendarColor.trim() ||
-            null,
+            dto.calendarColor.trim() || null,
         }),
 
-        ...(dto.commissionPercentage !==
-          undefined && {
+        ...(dto.commissionPercentage !== undefined && {
           commissionPercentage:
             new Prisma.Decimal(
               dto.commissionPercentage,
             ),
         }),
 
-        ...(dto.displayOrder !==
-          undefined && {
+        ...(dto.displayOrder !== undefined && {
           displayOrder:
             dto.displayOrder,
         }),
 
-        ...(dto.isActive !==
-          undefined && {
+        ...(dto.isActive !== undefined && {
           isActive:
             dto.isActive,
         }),
@@ -286,11 +278,9 @@ export class BarbersService {
           userId,
           deletedAt: null,
 
-          ...(excludedBarberId !==
-            undefined && {
+          ...(excludedBarberId !== undefined && {
             id: {
-              not:
-                excludedBarberId,
+              not: excludedBarberId,
             },
           }),
         },

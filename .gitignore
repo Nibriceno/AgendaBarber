@@ -5,6 +5,9 @@ node_modules/
 dist/
 coverage/
 
+# Local database backups
+backups/
+
 # Environment variables
 .env
 .env.*

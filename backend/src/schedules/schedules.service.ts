@@ -61,12 +61,15 @@ export class SchedulesService {
     });
   }
 
-  async findAll() {
+  async findAll(
+    businessId: number,
+  ) {
     return this.prisma.schedule.findMany({
       where: {
         isActive: true,
 
         barber: {
+          businessId,
           isActive: true,
           deletedAt: null,
         },
@@ -90,7 +93,40 @@ export class SchedulesService {
     });
   }
 
+  async findByBarber(
+    businessId: number,
+    barberId: number,
+  ) {
+    await this.validateBarber(
+      businessId,
+      barberId,
+    );
+
+    return this.prisma.schedule.findMany({
+      where: {
+        barberId,
+        isActive: true,
+
+        barber: {
+          businessId,
+          isActive: true,
+          deletedAt: null,
+        },
+      },
+
+      orderBy: [
+        {
+          dayOfWeek: 'asc',
+        },
+        {
+          startMinute: 'asc',
+        },
+      ],
+    });
+  }
+
   async findOne(
+    businessId: number,
     id: number,
   ) {
     const schedule =
@@ -100,6 +136,7 @@ export class SchedulesService {
           isActive: true,
 
           barber: {
+            businessId,
             isActive: true,
             deletedAt: null,
           },
@@ -171,7 +208,8 @@ export class SchedulesService {
 
     return this.prisma.schedule.update({
       where: {
-        id: current.id,
+        id:
+          current.id,
       },
 
       data: {
@@ -278,7 +316,8 @@ export class SchedulesService {
     }
 
     if (
-      startMinute >= endMinute
+      startMinute >=
+      endMinute
     ) {
       throw new BadRequestException(
         'La hora de término debe ser posterior a la hora de inicio.',
@@ -293,23 +332,6 @@ export class SchedulesService {
     endMinute: number,
     excludedScheduleId?: number,
   ) {
-    /*
-     * Dos intervalos se solapan cuando:
-     *
-     * existing.start < new.end
-     * &&
-     * existing.end > new.start
-     *
-     * Ejemplo:
-     * existente 09:00-13:00
-     * nuevo     12:00-17:00
-     *
-     * 540 < 1020 = true
-     * 780 > 720  = true
-     *
-     * Por lo tanto hay solapamiento.
-     */
-
     const overlappingSchedule =
       await this.prisma.schedule.findFirst({
         where: {
@@ -341,7 +363,9 @@ export class SchedulesService {
         },
       });
 
-    if (overlappingSchedule) {
+    if (
+      overlappingSchedule
+    ) {
       throw new ConflictException(
         'El horario se solapa con otro horario existente del barbero.',
       );

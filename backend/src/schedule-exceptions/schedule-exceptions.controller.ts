@@ -13,6 +13,7 @@ import {
 import { UserRole } from '@prisma/client';
 
 import { ScheduleExceptionsService } from './schedule-exceptions.service';
+
 import { CreateScheduleExceptionDto } from './dto/create-schedule-exception.dto';
 import { UpdateScheduleExceptionDto } from './dto/update-schedule-exception.dto';
 
@@ -25,6 +26,10 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/interfaces/auth-user.interface';
 
 @Controller('schedule-exceptions')
+@UseGuards(
+  JwtAuthGuard,
+  RolesGuard,
+)
 export class ScheduleExceptionsController {
   constructor(
     private readonly scheduleExceptionsService:
@@ -32,10 +37,6 @@ export class ScheduleExceptionsController {
   ) {}
 
   @Post()
-  @UseGuards(
-    JwtAuthGuard,
-    RolesGuard,
-  )
   @Roles(
     UserRole.ADMIN,
     UserRole.RECEPTIONIST,
@@ -54,25 +55,66 @@ export class ScheduleExceptionsController {
   }
 
   @Get()
-  findAll() {
-    return this.scheduleExceptionsService.findAll();
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
+  findAll(
+    @CurrentUser()
+    currentUser: AuthUser,
+  ) {
+    return this.scheduleExceptionsService.findAll(
+      currentUser.businessId,
+    );
+  }
+
+  /*
+   * Debe ir antes de @Get(':id')
+   * para evitar que "barber" sea tratado como un id.
+   */
+  @Get('barber/:barberId')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
+  findByBarber(
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Param(
+      'barberId',
+      ParseIntPipe,
+    )
+    barberId: number,
+  ) {
+    return this.scheduleExceptionsService.findByBarber(
+      currentUser.businessId,
+      barberId,
+    );
   }
 
   @Get(':id')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
   findOne(
-    @Param('id', ParseIntPipe)
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Param(
+      'id',
+      ParseIntPipe,
+    )
     id: number,
   ) {
     return this.scheduleExceptionsService.findOne(
+      currentUser.businessId,
       id,
     );
   }
 
   @Patch(':id')
-  @UseGuards(
-    JwtAuthGuard,
-    RolesGuard,
-  )
   @Roles(
     UserRole.ADMIN,
     UserRole.RECEPTIONIST,
@@ -81,7 +123,10 @@ export class ScheduleExceptionsController {
     @CurrentUser()
     currentUser: AuthUser,
 
-    @Param('id', ParseIntPipe)
+    @Param(
+      'id',
+      ParseIntPipe,
+    )
     id: number,
 
     @Body()
@@ -95,16 +140,17 @@ export class ScheduleExceptionsController {
   }
 
   @Delete(':id')
-  @UseGuards(
-    JwtAuthGuard,
-    RolesGuard,
+  @Roles(
+    UserRole.ADMIN,
   )
-  @Roles(UserRole.ADMIN)
   remove(
     @CurrentUser()
     currentUser: AuthUser,
 
-    @Param('id', ParseIntPipe)
+    @Param(
+      'id',
+      ParseIntPipe,
+    )
     id: number,
   ) {
     return this.scheduleExceptionsService.remove(

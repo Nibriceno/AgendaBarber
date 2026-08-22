@@ -26,7 +26,9 @@ export class ScheduleExceptionsService {
     );
 
     const date =
-      this.parseDate(dto.date);
+      this.parseDate(
+        dto.date,
+      );
 
     this.validateExceptionConfiguration(
       dto.isDayOff,
@@ -64,23 +66,52 @@ export class ScheduleExceptionsService {
           null,
       },
 
-      include: {
-        barber: true,
+      select: {
+        id: true,
+        barberId: true,
+        date: true,
+        isDayOff: true,
+        startMinute: true,
+        endMinute: true,
+        reason: true,
+
+        barber: {
+          select: {
+            id: true,
+            displayName: true,
+          },
+        },
       },
     });
   }
 
-  async findAll() {
+  async findAll(
+    businessId: number,
+  ) {
     return this.prisma.scheduleException.findMany({
       where: {
         barber: {
+          businessId,
           isActive: true,
           deletedAt: null,
         },
       },
 
-      include: {
-        barber: true,
+      select: {
+        id: true,
+        barberId: true,
+        date: true,
+        isDayOff: true,
+        startMinute: true,
+        endMinute: true,
+        reason: true,
+
+        barber: {
+          select: {
+            id: true,
+            displayName: true,
+          },
+        },
       },
 
       orderBy: [
@@ -94,7 +125,44 @@ export class ScheduleExceptionsService {
     });
   }
 
+  async findByBarber(
+    businessId: number,
+    barberId: number,
+  ) {
+    await this.validateBarber(
+      businessId,
+      barberId,
+    );
+
+    return this.prisma.scheduleException.findMany({
+      where: {
+        barberId,
+
+        barber: {
+          businessId,
+          isActive: true,
+          deletedAt: null,
+        },
+      },
+
+      select: {
+        id: true,
+        barberId: true,
+        date: true,
+        isDayOff: true,
+        startMinute: true,
+        endMinute: true,
+        reason: true,
+      },
+
+      orderBy: {
+        date: 'asc',
+      },
+    });
+  }
+
   async findOne(
+    businessId: number,
     id: number,
   ) {
     const exception =
@@ -103,13 +171,27 @@ export class ScheduleExceptionsService {
           id,
 
           barber: {
+            businessId,
             isActive: true,
             deletedAt: null,
           },
         },
 
-        include: {
-          barber: true,
+        select: {
+          id: true,
+          barberId: true,
+          date: true,
+          isDayOff: true,
+          startMinute: true,
+          endMinute: true,
+          reason: true,
+
+          barber: {
+            select: {
+              id: true,
+              displayName: true,
+            },
+          },
         },
       });
 
@@ -138,7 +220,8 @@ export class ScheduleExceptionsService {
       current.barberId;
 
     const date =
-      dto.date !== undefined
+      dto.date !==
+      undefined
         ? this.parseDate(
             dto.date,
           )
@@ -148,10 +231,6 @@ export class ScheduleExceptionsService {
       dto.isDayOff ??
       current.isDayOff;
 
-    /*
-     * Si se transforma en día libre,
-     * anulamos automáticamente las horas.
-     */
     const startMinute =
       isDayOff
         ? undefined
@@ -197,7 +276,8 @@ export class ScheduleExceptionsService {
 
     return this.prisma.scheduleException.update({
       where: {
-        id: current.id,
+        id:
+          current.id,
       },
 
       data: {
@@ -236,8 +316,21 @@ export class ScheduleExceptionsService {
         }),
       },
 
-      include: {
-        barber: true,
+      select: {
+        id: true,
+        barberId: true,
+        date: true,
+        isDayOff: true,
+        startMinute: true,
+        endMinute: true,
+        reason: true,
+
+        barber: {
+          select: {
+            id: true,
+            displayName: true,
+          },
+        },
       },
     });
   }
@@ -253,11 +346,9 @@ export class ScheduleExceptionsService {
       );
 
     /*
-     * ScheduleException no tiene
-     * deletedAt ni isActive en tu schema.
-     *
-     * Por lo tanto aquí sí hacemos
-     * eliminación física.
+     * ScheduleException no posee
+     * deletedAt ni isActive.
+     * Aquí la eliminación es física.
      */
     return this.prisma.scheduleException.delete({
       where: {

@@ -31,10 +31,61 @@ export class BarberServicesService {
       dto.serviceId,
     );
 
-    await this.validateDuplicate(
-      dto.barberId,
-      dto.serviceId,
-    );
+    const existing =
+      await this.prisma.barberService.findFirst({
+        where: {
+          barberId: dto.barberId,
+          serviceId: dto.serviceId,
+        },
+
+        select: {
+          id: true,
+          isActive: true,
+        },
+      });
+
+    if (existing?.isActive) {
+      throw new ConflictException(
+        'Este servicio ya está asignado al barbero.',
+      );
+    }
+
+    /*
+     * Si la relación ya existía pero fue desactivada,
+     * la reutilizamos en vez de crear otra.
+     *
+     * Esto es necesario porque BarberService tiene:
+     *
+     * @@unique([barberId, serviceId])
+     */
+    if (existing) {
+      return this.prisma.barberService.update({
+        where: {
+          id: existing.id,
+        },
+
+        data: {
+          customPrice:
+            dto.customPrice !== undefined
+              ? new Prisma.Decimal(
+                  dto.customPrice,
+                )
+              : null,
+
+          customDurationMinutes:
+            dto.customDurationMinutes ??
+            null,
+
+          isActive:
+            dto.isActive ?? true,
+        },
+
+        include: {
+          barber: true,
+          service: true,
+        },
+      });
+    }
 
     return this.prisma.barberService.create({
       data: {
@@ -66,17 +117,21 @@ export class BarberServicesService {
     });
   }
 
-  async findAll() {
+  async findAll(
+    businessId: number,
+  ) {
     return this.prisma.barberService.findMany({
       where: {
         isActive: true,
 
         barber: {
+          businessId,
           isActive: true,
           deletedAt: null,
         },
 
         service: {
+          businessId,
           isActive: true,
           deletedAt: null,
         },
@@ -92,8 +147,44 @@ export class BarberServicesService {
       },
     });
   }
+async findByBarber(
+  businessId: number,
+  barberId: number,
+) {
+  await this.validateBarber(
+    businessId,
+    barberId,
+  );
 
+  return this.prisma.barberService.findMany({
+    where: {
+      barberId,
+      isActive: true,
+
+      barber: {
+        businessId,
+        isActive: true,
+        deletedAt: null,
+      },
+
+      service: {
+        businessId,
+        isActive: true,
+        deletedAt: null,
+      },
+    },
+
+    include: {
+      service: true,
+    },
+
+    orderBy: {
+      id: 'asc',
+    },
+  });
+}
   async findOne(
+    businessId: number,
     id: number,
   ) {
     const barberService =
@@ -103,11 +194,13 @@ export class BarberServicesService {
           isActive: true,
 
           barber: {
+            businessId,
             isActive: true,
             deletedAt: null,
           },
 
           service: {
+            businessId,
             isActive: true,
             deletedAt: null,
           },
@@ -148,8 +241,7 @@ export class BarberServicesService {
       current.serviceId;
 
     if (
-      dto.barberId !==
-      undefined
+      dto.barberId !== undefined
     ) {
       await this.validateBarber(
         businessId,
@@ -158,8 +250,7 @@ export class BarberServicesService {
     }
 
     if (
-      dto.serviceId !==
-      undefined
+      dto.serviceId !== undefined
     ) {
       await this.validateService(
         businessId,
@@ -184,34 +275,31 @@ export class BarberServicesService {
       },
 
       data: {
-        ...(dto.barberId !==
-          undefined && {
+        ...(dto.barberId !== undefined && {
           barberId:
             dto.barberId,
         }),
 
-        ...(dto.serviceId !==
-          undefined && {
+        ...(dto.serviceId !== undefined && {
           serviceId:
             dto.serviceId,
         }),
 
-        ...(dto.customPrice !==
-          undefined && {
+        ...(dto.customPrice !== undefined && {
           customPrice:
-            new Prisma.Decimal(
-              dto.customPrice,
-            ),
+            dto.customPrice === null
+              ? null
+              : new Prisma.Decimal(
+                  dto.customPrice,
+                ),
         }),
 
-        ...(dto.customDurationMinutes !==
-          undefined && {
+        ...(dto.customDurationMinutes !== undefined && {
           customDurationMinutes:
             dto.customDurationMinutes,
         }),
 
-        ...(dto.isActive !==
-          undefined && {
+        ...(dto.isActive !== undefined && {
           isActive:
             dto.isActive,
         }),
@@ -236,8 +324,7 @@ export class BarberServicesService {
 
     return this.prisma.barberService.update({
       where: {
-        id:
-          barberService.id,
+        id: barberService.id,
       },
 
       data: {
@@ -312,8 +399,7 @@ export class BarberServicesService {
           barberId,
           serviceId,
 
-          ...(excludedId !==
-            undefined && {
+          ...(excludedId !== undefined && {
             id: {
               not: excludedId,
             },
@@ -328,7 +414,9 @@ export class BarberServicesService {
 
     if (existing) {
       throw new ConflictException(
-        'Este servicio ya está asignado al barbero.',
+        existing.isActive
+          ? 'Este servicio ya está asignado al barbero.'
+          : 'Ya existe una asignación inactiva para este servicio. Reactívala en lugar de crear una nueva.',
       );
     }
   }

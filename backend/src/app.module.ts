@@ -5,6 +5,10 @@ import {
 } from '@nestjs/core';
 
 import {
+  StaffModule
+} from './staff/staff.module';
+
+import {
   ConfigModule,
 } from '@nestjs/config';
 
@@ -46,6 +50,10 @@ import { PublicBookingModule } from './public-booking/public-booking.module';
       validate:
         validateEnvironment,
     }),
+
+        UsersModule,
+        StaffModule,
+        AppointmentsModule,
 
     /*
      * Rate limiting global.

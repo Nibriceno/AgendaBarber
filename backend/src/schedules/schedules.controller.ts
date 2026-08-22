@@ -18,19 +18,23 @@ import { UpdateScheduleDto } from './dto/update-schedule.dto';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 import type { AuthUser } from '../auth/interfaces/auth-user.interface';
 
 @Controller('schedules')
+@UseGuards(
+  JwtAuthGuard,
+  RolesGuard,
+)
 export class SchedulesController {
   constructor(
     private readonly schedulesService: SchedulesService,
   ) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(
     UserRole.ADMIN,
     UserRole.RECEPTIONIST,
@@ -49,22 +53,66 @@ export class SchedulesController {
   }
 
   @Get()
-  findAll() {
-    return this.schedulesService.findAll();
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
+  findAll(
+    @CurrentUser()
+    currentUser: AuthUser,
+  ) {
+    return this.schedulesService.findAll(
+      currentUser.businessId,
+    );
+  }
+
+  /*
+   * IMPORTANTE:
+   * esta ruta debe ir antes de @Get(':id')
+   */
+  @Get('barber/:barberId')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
+  findByBarber(
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Param(
+      'barberId',
+      ParseIntPipe,
+    )
+    barberId: number,
+  ) {
+    return this.schedulesService.findByBarber(
+      currentUser.businessId,
+      barberId,
+    );
   }
 
   @Get(':id')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
   findOne(
-    @Param('id', ParseIntPipe)
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Param(
+      'id',
+      ParseIntPipe,
+    )
     id: number,
   ) {
     return this.schedulesService.findOne(
+      currentUser.businessId,
       id,
     );
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(
     UserRole.ADMIN,
     UserRole.RECEPTIONIST,
@@ -73,7 +121,10 @@ export class SchedulesController {
     @CurrentUser()
     currentUser: AuthUser,
 
-    @Param('id', ParseIntPipe)
+    @Param(
+      'id',
+      ParseIntPipe,
+    )
     id: number,
 
     @Body()
@@ -87,13 +138,15 @@ export class SchedulesController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   remove(
     @CurrentUser()
     currentUser: AuthUser,
 
-    @Param('id', ParseIntPipe)
+    @Param(
+      'id',
+      ParseIntPipe,
+    )
     id: number,
   ) {
     return this.schedulesService.remove(

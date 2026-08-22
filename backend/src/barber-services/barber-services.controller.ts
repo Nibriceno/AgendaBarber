@@ -26,6 +26,10 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/interfaces/auth-user.interface';
 
 @Controller('barber-services')
+@UseGuards(
+  JwtAuthGuard,
+  RolesGuard,
+)
 export class BarberServicesController {
   constructor(
     private readonly barberServicesService:
@@ -33,10 +37,6 @@ export class BarberServicesController {
   ) {}
 
   @Post()
-  @UseGuards(
-    JwtAuthGuard,
-    RolesGuard,
-  )
   @Roles(
     UserRole.ADMIN,
     UserRole.RECEPTIONIST,
@@ -55,25 +55,62 @@ export class BarberServicesController {
   }
 
   @Get()
-  findAll() {
-    return this.barberServicesService.findAll();
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
+  findAll(
+    @CurrentUser()
+    currentUser: AuthUser,
+  ) {
+    return this.barberServicesService.findAll(
+      currentUser.businessId,
+    );
+  }
+
+  @Get('barber/:barberId')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
+  findByBarber(
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Param(
+      'barberId',
+      ParseIntPipe,
+    )
+    barberId: number,
+  ) {
+    return this.barberServicesService.findByBarber(
+      currentUser.businessId,
+      barberId,
+    );
   }
 
   @Get(':id')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
   findOne(
-    @Param('id', ParseIntPipe)
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Param(
+      'id',
+      ParseIntPipe,
+    )
     id: number,
   ) {
     return this.barberServicesService.findOne(
+      currentUser.businessId,
       id,
     );
   }
 
   @Patch(':id')
-  @UseGuards(
-    JwtAuthGuard,
-    RolesGuard,
-  )
   @Roles(
     UserRole.ADMIN,
     UserRole.RECEPTIONIST,
@@ -82,7 +119,10 @@ export class BarberServicesController {
     @CurrentUser()
     currentUser: AuthUser,
 
-    @Param('id', ParseIntPipe)
+    @Param(
+      'id',
+      ParseIntPipe,
+    )
     id: number,
 
     @Body()
@@ -96,16 +136,15 @@ export class BarberServicesController {
   }
 
   @Delete(':id')
-  @UseGuards(
-    JwtAuthGuard,
-    RolesGuard,
-  )
   @Roles(UserRole.ADMIN)
   remove(
     @CurrentUser()
     currentUser: AuthUser,
 
-    @Param('id', ParseIntPipe)
+    @Param(
+      'id',
+      ParseIntPipe,
+    )
     id: number,
   ) {
     return this.barberServicesService.remove(

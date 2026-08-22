@@ -15,6 +15,7 @@ import { UserRole } from '@prisma/client';
 import { UsersService } from './users.service';
 
 import { CreateUserDto } from './dto/create-user.dto';
+import { CreateBarberAccessDto } from './dto/create-barber-access.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
@@ -38,6 +39,54 @@ export class UsersController {
     private readonly usersService: UsersService,
   ) {}
 
+  /*
+   * ============================================================
+   * CREAR ACCESO PARA BARBERO
+   * ============================================================
+   *
+   * Solo ADMIN puede crear una cuenta BARBER.
+   *
+   * Este flujo:
+   * - crea el User con role BARBER
+   * - lo vincula con un perfil Barber existente
+   * - se ejecuta mediante una transacción en UsersService
+   */
+  @Post('barber-access')
+  @Roles(UserRole.ADMIN)
+  createBarberAccess(
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Body()
+    dto: CreateBarberAccessDto,
+  ) {
+    return this.usersService.createBarberAccess(
+      currentUser.businessId,
+      dto,
+    );
+  }
+
+    @Get('barber-access/available-barbers')
+  @Roles(UserRole.ADMIN)
+  findBarbersWithoutAccess(
+    @CurrentUser()
+    currentUser: AuthUser,
+  ) {
+    return this.usersService.findBarbersWithoutAccess(
+      currentUser.businessId,
+    );
+  }
+
+  /*
+   * ============================================================
+   * CREAR USUARIO
+   * ============================================================
+   *
+   * Endpoint administrativo general.
+   *
+   * BARBER no debe crearse por este endpoint.
+   * Para eso existe POST /users/barber-access.
+   */
   @Post()
   @Roles(UserRole.ADMIN)
   create(
@@ -53,6 +102,11 @@ export class UsersController {
     );
   }
 
+  /*
+   * ============================================================
+   * LISTAR USUARIOS DEL NEGOCIO
+   * ============================================================
+   */
   @Get()
   @Roles(
     UserRole.ADMIN,
@@ -67,6 +121,18 @@ export class UsersController {
     );
   }
 
+  /*
+   * ============================================================
+   * CAMBIAR ROL
+   * ============================================================
+   *
+   * Solo ADMIN.
+   *
+   * UsersService es responsable de impedir:
+   * - asignar ADMIN
+   * - convertir arbitrariamente un usuario en BARBER
+   * - romper la relación User <-> Barber
+   */
   @Patch(':id/role')
   @Roles(UserRole.ADMIN)
   updateRole(
@@ -86,6 +152,11 @@ export class UsersController {
     );
   }
 
+  /*
+   * ============================================================
+   * ACTIVAR / DESACTIVAR USUARIO
+   * ============================================================
+   */
   @Patch(':id/status')
   @Roles(UserRole.ADMIN)
   updateStatus(
@@ -106,6 +177,11 @@ export class UsersController {
     );
   }
 
+  /*
+   * ============================================================
+   * CAMBIAR CONTRASEÑA
+   * ============================================================
+   */
   @Patch(':id/password')
   @Roles(UserRole.ADMIN)
   changePassword(
@@ -125,6 +201,11 @@ export class UsersController {
     );
   }
 
+  /*
+   * ============================================================
+   * OBTENER USUARIO
+   * ============================================================
+   */
   @Get(':id')
   @Roles(
     UserRole.ADMIN,
@@ -143,6 +224,11 @@ export class UsersController {
     );
   }
 
+  /*
+   * ============================================================
+   * EDITAR DATOS GENERALES
+   * ============================================================
+   */
   @Patch(':id')
   @Roles(UserRole.ADMIN)
   update(
@@ -162,6 +248,11 @@ export class UsersController {
     );
   }
 
+  /*
+   * ============================================================
+   * ELIMINAR / DESACTIVAR USUARIO
+   * ============================================================
+   */
   @Delete(':id')
   @Roles(UserRole.ADMIN)
   remove(

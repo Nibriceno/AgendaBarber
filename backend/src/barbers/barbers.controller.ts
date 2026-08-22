@@ -26,16 +26,16 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/interfaces/auth-user.interface';
 
 @Controller('barbers')
+@UseGuards(
+  JwtAuthGuard,
+  RolesGuard,
+)
 export class BarbersController {
   constructor(
     private readonly barbersService: BarbersService,
   ) {}
 
   @Post()
-  @UseGuards(
-    JwtAuthGuard,
-    RolesGuard,
-  )
   @Roles(
     UserRole.ADMIN,
     UserRole.RECEPTIONIST,
@@ -54,25 +54,38 @@ export class BarbersController {
   }
 
   @Get()
-  findAll() {
-    return this.barbersService.findAll();
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
+  findAll(
+    @CurrentUser()
+    currentUser: AuthUser,
+  ) {
+    return this.barbersService.findAll(
+      currentUser.businessId,
+    );
   }
 
   @Get(':id')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
   findOne(
+    @CurrentUser()
+    currentUser: AuthUser,
+
     @Param('id', ParseIntPipe)
     id: number,
   ) {
     return this.barbersService.findOne(
+      currentUser.businessId,
       id,
     );
   }
 
   @Patch(':id')
-  @UseGuards(
-    JwtAuthGuard,
-    RolesGuard,
-  )
   @Roles(
     UserRole.ADMIN,
     UserRole.RECEPTIONIST,
@@ -95,10 +108,6 @@ export class BarbersController {
   }
 
   @Delete(':id')
-  @UseGuards(
-    JwtAuthGuard,
-    RolesGuard,
-  )
   @Roles(UserRole.ADMIN)
   remove(
     @CurrentUser()

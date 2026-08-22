@@ -71,7 +71,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       DATABASE_URL: ${DATABASE_URL}
-      FRONTEND_URL: http://localhost:5173
+      FRONTEND_URL: http://localhost:5173,http://localhost:3001
 
     ports:
       - "${BACKEND_PORT}:3000"
