@@ -1,21 +1,49 @@
 import LoginForm from "@/features/auth/components/LoginForm";
+import PublicHeader from "@/features/public-booking/components/PublicHeader";
+import {
+  getPublicBusinessOrNotFound,
+} from "../_lib/get-public-business-or-not-found";
 
-export default function LoginPage() {
+type LoginPageProps = {
+  params: Promise<{
+    businessSlug: string;
+  }>;
+};
+
+export default async function LoginPage({
+  params,
+}: LoginPageProps) {
+  const { businessSlug } = await params;
+  const business =
+    await getPublicBusinessOrNotFound(
+      businessSlug,
+    );
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-zinc-50 px-4">
-      <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-zinc-900">
-            AgendaBarber
-          </h1>
+    <div className="min-h-screen bg-zinc-50">
+      <PublicHeader
+        businessName={business.name}
+        businessSlug={businessSlug}
+      />
 
-          <p className="mt-2 text-zinc-600">
-            Ingresa a tu cuenta
-          </p>
+      <main className="flex min-h-[calc(100vh-72px)] items-center justify-center px-4 py-12 sm:px-6">
+        <div className="w-full max-w-md">
+          <div className="mb-8 text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+              AgendaBarber
+            </p>
+            <h1 className="mt-2 text-3xl font-bold text-zinc-900">
+              {business.name}
+            </h1>
+
+            <p className="mt-2 text-zinc-600">
+              Ingresa a tu cuenta
+            </p>
+          </div>
+
+          <LoginForm />
         </div>
-
-        <LoginForm />
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }

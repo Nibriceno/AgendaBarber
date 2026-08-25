@@ -1,19 +1,13 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 
-import {
-  Throttle,
-} from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
 
 import { AuthService } from './auth.service';
 
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
 
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
@@ -23,9 +17,7 @@ import type { AuthUser } from './interfaces/auth-user.interface';
 
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private readonly authService: AuthService,
-  ) {}
+  constructor(private readonly authService: AuthService) {}
 
   /*
    * LOGIN
@@ -47,9 +39,7 @@ export class AuthController {
     @Body()
     loginDto: LoginDto,
   ) {
-    return this.authService.login(
-      loginDto,
-    );
+    return this.authService.login(loginDto);
   }
 
   /*
@@ -69,9 +59,35 @@ export class AuthController {
     @Body()
     registerDto: RegisterDto,
   ) {
-    return this.authService.register(
-      registerDto,
-    );
+    return this.authService.register(registerDto);
+  }
+
+  @Throttle({
+    default: {
+      limit: 5,
+      ttl: 60_000,
+    },
+  })
+  @Post('verify-email')
+  verifyEmail(
+    @Body()
+    verifyEmailDto: VerifyEmailDto,
+  ) {
+    return this.authService.verifyEmail(verifyEmailDto);
+  }
+
+  @Throttle({
+    default: {
+      limit: 3,
+      ttl: 60_000,
+    },
+  })
+  @Post('resend-verification')
+  resendVerification(
+    @Body()
+    resendVerificationDto: ResendVerificationDto,
+  ) {
+    return this.authService.resendVerification(resendVerificationDto);
   }
 
   /*

@@ -4,6 +4,7 @@ import {
 
 import {
   getPublicBarbers,
+  getPublicBusiness,
   getPublicServices,
 } from "@/features/public-booking/api/public-booking.api";
 
@@ -15,18 +16,14 @@ type PublicBusinessPageProps = {
   }>;
 };
 
-export default async function PublicBusinessPage({
-  params,
-}: PublicBusinessPageProps) {
-  const {
-    businessSlug,
-  } = await params;
-
+async function getPublicBusinessPageData(
+  businessSlug: string,
+) {
   try {
-    const [
-      barbers,
-      services,
-    ] = await Promise.all([
+    return await Promise.all([
+      getPublicBusiness(
+        businessSlug,
+      ),
       getPublicBarbers(
         businessSlug,
       ),
@@ -34,21 +31,40 @@ export default async function PublicBusinessPage({
         businessSlug,
       ),
     ]);
-
-    return (
-      <PublicBookingHome
-        businessSlug={
-          businessSlug
-        }
-        barbers={
-          barbers
-        }
-        services={
-          services
-        }
-      />
-    );
   } catch {
     notFound();
   }
+}
+
+export default async function PublicBusinessPage({
+  params,
+}: PublicBusinessPageProps) {
+  const {
+    businessSlug,
+  } = await params;
+
+  const [
+    business,
+    barbers,
+    services,
+  ] = await getPublicBusinessPageData(
+    businessSlug,
+  );
+
+  return (
+    <PublicBookingHome
+      business={
+        business
+      }
+      businessSlug={
+        businessSlug
+      }
+      barbers={
+        barbers
+      }
+      services={
+        services
+      }
+    />
+  );
 }

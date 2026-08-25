@@ -89,6 +89,10 @@ model User {
   phoneVerified Boolean   @default(false)
   lastLoginAt   DateTime?
 
+  emailVerificationTokenHash String?   @unique @db.VarChar(64)
+  emailVerificationExpiresAt DateTime?
+  emailVerificationSentAt    DateTime?
+
   barber Barber?
 
   appointments              Appointment[]        @relation("CustomerAppointments")

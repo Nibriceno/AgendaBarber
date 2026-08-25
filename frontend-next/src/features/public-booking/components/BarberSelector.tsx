@@ -1,3 +1,7 @@
+import Image, {
+  type ImageLoaderProps,
+} from "next/image";
+
 import type {
   PublicBarber,
 } from "../types/public-booking.types";
@@ -6,7 +10,7 @@ type BarberSelectorProps = {
   barbers: PublicBarber[];
   selectedBarberId: number | null;
   onSelect: (
-    barberId: number,
+    barberId: number | null,
   ) => void;
 };
 
@@ -23,25 +27,48 @@ function getInitials(
     .join("");
 }
 
+function barberPhotoLoader({
+  src,
+}: ImageLoaderProps): string {
+  return src;
+}
+
 export default function BarberSelector({
   barbers,
   selectedBarberId,
   onSelect,
 }: BarberSelectorProps) {
   return (
-    <section>
-      <div className="mb-5">
-        <p className="text-sm font-medium text-zinc-500">
-          Paso 1
-        </p>
+    <section className="rounded-[1.75rem] border border-zinc-200 bg-white p-5 shadow-[0_18px_45px_-36px_rgba(0,0,0,0.45)] sm:p-6">
+      <div className="mb-5 flex items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
+            Paso 2
+          </p>
 
-        <h2 className="mt-1 text-2xl font-semibold tracking-tight text-zinc-950">
-          Elige tu barbero
-        </h2>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950">
+            Elige tu profesional
+          </h2>
+        </div>
+
+        {selectedBarberId !== null && (
+          <button
+            type="button"
+            onClick={() =>
+              onSelect(null)
+            }
+            className="shrink-0 text-xs font-semibold text-zinc-500 underline-offset-4 transition hover:text-zinc-950 hover:underline focus:outline-none focus:ring-2 focus:ring-zinc-300"
+          >
+            Ver todos
+          </button>
+        )}
       </div>
 
-      <div className="-mx-4 overflow-x-auto px-4 pb-3 sm:mx-0 sm:px-0">
-        <div className="flex min-w-max gap-5 sm:min-w-0 sm:flex-wrap">
+      <p className="mb-5 text-sm leading-6 text-zinc-500">
+        Selecciona quién te atenderá. El catálogo se ajustará a sus servicios.
+      </p>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
           {barbers.map((barber) => {
             const selected =
               selectedBarberId ===
@@ -59,59 +86,69 @@ export default function BarberSelector({
                 aria-pressed={
                   selected
                 }
-                className="group flex w-[92px] shrink-0 flex-col items-center text-center focus:outline-none"
+                className={[
+                  "group flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition-all focus:outline-none focus:ring-2 focus:ring-zinc-300",
+                  selected
+                    ? "border-zinc-950 bg-zinc-950 text-white shadow-md"
+                    : "border-zinc-200 bg-white hover:border-zinc-400 hover:bg-zinc-50",
+                ].join(" ")}
               >
                 <div
                   className={[
-                    "relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border-2 transition-all sm:h-24 sm:w-24",
+                    "relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border transition-all",
                     selected
-                      ? "border-zinc-950 ring-4 ring-zinc-950/10"
+                      ? "border-white/20 bg-white/10"
                       : "border-zinc-200 group-hover:border-zinc-400",
                   ].join(" ")}
                 >
                   {barber.photoUrl ? (
-                    <img
+                    <Image
                       src={
                         barber.photoUrl
                       }
                       alt={
                         barber.displayName
                       }
-                      loading="lazy"
-                      decoding="async"
+                      width={48}
+                      height={48}
+                      loader={
+                        barberPhotoLoader
+                      }
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <span className="text-lg font-semibold text-zinc-600">
+                    <span className={selected ? "text-sm font-semibold text-white" : "text-sm font-semibold text-zinc-600"}>
                       {getInitials(
                         barber.displayName,
                       )}
                     </span>
                   )}
 
-                  {selected && (
-                    <span className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-zinc-950 text-xs text-white">
-                      ✓
-                    </span>
-                  )}
                 </div>
+
+                <span className="min-w-0 flex-1">
+                  <span className={selected ? "block truncate text-sm font-semibold text-white" : "block truncate text-sm font-semibold text-zinc-900"}>
+                    {barber.displayName}
+                  </span>
+
+                  <span className={selected ? "mt-0.5 block truncate text-xs text-zinc-400" : "mt-0.5 block truncate text-xs text-zinc-500"}>
+                    {barber.specialty ?? "Profesional"}
+                  </span>
+                </span>
 
                 <span
                   className={[
-                    "mt-2 line-clamp-2 text-sm leading-5",
+                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs transition",
                     selected
-                      ? "font-semibold text-zinc-950"
-                      : "font-medium text-zinc-700",
+                      ? "border-white bg-white text-zinc-950"
+                      : "border-zinc-300 text-transparent",
                   ].join(" ")}
                 >
-                  {
-                    barber.displayName
-                  }
+                  ✓
                 </span>
               </button>
             );
           })}
-        </div>
       </div>
     </section>
   );

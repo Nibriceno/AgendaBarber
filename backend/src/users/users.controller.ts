@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 
 import { UserRole } from '@prisma/client';
+import { Throttle } from '@nestjs/throttler';
 
 import { UsersService } from './users.service';
 
@@ -20,6 +21,8 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { ChangeUserPasswordDto } from './dto/change-user-password.dto';
+import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
+import { ChangeMyPasswordDto } from './dto/change-my-password.dto';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -30,14 +33,9 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/interfaces/auth-user.interface';
 
 @Controller('users')
-@UseGuards(
-  JwtAuthGuard,
-  RolesGuard,
-)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class UsersController {
-  constructor(
-    private readonly usersService: UsersService,
-  ) {}
+  constructor(private readonly usersService: UsersService) {}
 
   /*
    * ============================================================
@@ -60,21 +58,16 @@ export class UsersController {
     @Body()
     dto: CreateBarberAccessDto,
   ) {
-    return this.usersService.createBarberAccess(
-      currentUser.businessId,
-      dto,
-    );
+    return this.usersService.createBarberAccess(currentUser.businessId, dto);
   }
 
-    @Get('barber-access/available-barbers')
+  @Get('barber-access/available-barbers')
   @Roles(UserRole.ADMIN)
   findBarbersWithoutAccess(
     @CurrentUser()
     currentUser: AuthUser,
   ) {
-    return this.usersService.findBarbersWithoutAccess(
-      currentUser.businessId,
-    );
+    return this.usersService.findBarbersWithoutAccess(currentUser.businessId);
   }
 
   /*
@@ -96,10 +89,7 @@ export class UsersController {
     @Body()
     createUserDto: CreateUserDto,
   ) {
-    return this.usersService.create(
-      currentUser.businessId,
-      createUserDto,
-    );
+    return this.usersService.create(currentUser.businessId, createUserDto);
   }
 
   /*
@@ -108,17 +98,51 @@ export class UsersController {
    * ============================================================
    */
   @Get()
-  @Roles(
-    UserRole.ADMIN,
-    UserRole.RECEPTIONIST,
-  )
+  @Roles(UserRole.ADMIN, UserRole.RECEPTIONIST)
   findAll(
     @CurrentUser()
     currentUser: AuthUser,
   ) {
-    return this.usersService.findAll(
-      currentUser.businessId,
-    );
+    return this.usersService.findAll(currentUser.businessId);
+  }
+
+  @Get('me/profile')
+  @Roles(UserRole.CLIENT)
+  getMyProfile(
+    @CurrentUser()
+    currentUser: AuthUser,
+  ) {
+    return this.usersService.getMyProfile(currentUser);
+  }
+
+  @Patch('me/profile')
+  @Roles(UserRole.CLIENT)
+  updateMyProfile(
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Body()
+    dto: UpdateMyProfileDto,
+  ) {
+    return this.usersService.updateMyProfile(currentUser, dto);
+  }
+
+  @Patch('me/password')
+  @Roles(UserRole.CLIENT)
+  @Throttle({
+    default: {
+      limit: 5,
+      ttl: 60_000,
+    },
+  })
+  changeMyPassword(
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Body()
+    dto: ChangeMyPasswordDto,
+  ) {
+    return this.usersService.changeMyPassword(currentUser, dto);
   }
 
   /*
@@ -145,11 +169,7 @@ export class UsersController {
     @Body()
     dto: UpdateUserRoleDto,
   ) {
-    return this.usersService.updateRole(
-      currentUser.businessId,
-      id,
-      dto,
-    );
+    return this.usersService.updateRole(currentUser.businessId, id, dto);
   }
 
   /*
@@ -194,11 +214,7 @@ export class UsersController {
     @Body()
     dto: ChangeUserPasswordDto,
   ) {
-    return this.usersService.changePassword(
-      currentUser.businessId,
-      id,
-      dto,
-    );
+    return this.usersService.changePassword(currentUser.businessId, id, dto);
   }
 
   /*
@@ -207,10 +223,7 @@ export class UsersController {
    * ============================================================
    */
   @Get(':id')
-  @Roles(
-    UserRole.ADMIN,
-    UserRole.RECEPTIONIST,
-  )
+  @Roles(UserRole.ADMIN, UserRole.RECEPTIONIST)
   findOne(
     @CurrentUser()
     currentUser: AuthUser,
@@ -218,10 +231,7 @@ export class UsersController {
     @Param('id', ParseIntPipe)
     id: number,
   ) {
-    return this.usersService.findOne(
-      currentUser.businessId,
-      id,
-    );
+    return this.usersService.findOne(currentUser.businessId, id);
   }
 
   /*
@@ -241,11 +251,7 @@ export class UsersController {
     @Body()
     updateUserDto: UpdateUserDto,
   ) {
-    return this.usersService.update(
-      currentUser.businessId,
-      id,
-      updateUserDto,
-    );
+    return this.usersService.update(currentUser.businessId, id, updateUserDto);
   }
 
   /*
@@ -262,9 +268,6 @@ export class UsersController {
     @Param('id', ParseIntPipe)
     id: number,
   ) {
-    return this.usersService.remove(
-      currentUser.businessId,
-      id,
-    );
+    return this.usersService.remove(currentUser.businessId, id);
   }
 }

@@ -55,30 +55,9 @@ export default function PublicServiceSelector({
   selectedServiceIds,
   onToggle,
 }: PublicServiceSelectorProps) {
-  if (!barber) {
-    return (
-      <section>
-        <p className="text-sm font-medium text-zinc-400">
-          Paso 2
-        </p>
-
-        <h2 className="mt-1 text-2xl font-semibold tracking-tight text-zinc-400">
-          Elige tus servicios
-        </h2>
-
-        <div className="mt-5 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-6 text-center">
-          <p className="text-sm text-zinc-500">
-            Primero selecciona un
-            barbero.
-          </p>
-        </div>
-      </section>
-    );
-  }
-
   const assignments =
     new Map(
-      barber.services.map(
+      (barber?.services ?? []).map(
         (item) => [
           item.serviceId,
           item,
@@ -87,26 +66,39 @@ export default function PublicServiceSelector({
     );
 
   const availableServices =
-    services.filter((service) =>
-      assignments.has(service.id),
-    );
+    barber
+      ? services.filter((service) =>
+          assignments.has(service.id),
+        )
+      : services;
 
   return (
-    <section>
-      <div className="mb-5">
-        <p className="text-sm font-medium text-zinc-500">
-          Paso 2
-        </p>
+    <section
+      id="servicios"
+      className="rounded-[1.75rem] border border-zinc-200 bg-white p-5 shadow-[0_18px_45px_-36px_rgba(0,0,0,0.45)] sm:p-6 lg:p-7"
+    >
+      <div className="mb-6 sm:flex sm:items-end sm:justify-between sm:gap-6">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
+            Paso 1
+          </p>
 
-        <h2 className="mt-1 text-2xl font-semibold tracking-tight text-zinc-950">
-          Elige tus servicios
-        </h2>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950 sm:text-3xl">
+            Elige tus servicios
+          </h2>
+        </div>
 
-        <p className="mt-2 text-sm text-zinc-500">
-          Servicios disponibles con{" "}
-          <span className="font-medium text-zinc-700">
-            {barber.displayName}
-          </span>
+        <p className="mt-2 text-sm text-zinc-500 sm:mt-0 sm:text-right">
+          {barber ? (
+            <>
+              Disponibles con{" "}
+              <span className="font-semibold text-zinc-800">
+                {barber.displayName}
+              </span>
+            </>
+          ) : (
+            "Explora el catálogo completo"
+          )}
         </p>
       </div>
 
@@ -114,13 +106,13 @@ export default function PublicServiceSelector({
       0 ? (
         <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-6 text-center">
           <p className="text-sm text-zinc-500">
-            Este barbero todavía no
-            tiene servicios
-            disponibles.
+            {barber
+              ? "Este profesional todavía no tiene servicios disponibles."
+              : "Todavía no hay servicios disponibles."}
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           {availableServices.map(
             (service) => {
               const assignment =
@@ -128,21 +120,17 @@ export default function PublicServiceSelector({
                   service.id,
                 );
 
-              if (!assignment) {
-                return null;
-              }
-
               const selected =
                 selectedServiceIds.includes(
                   service.id,
                 );
 
               const effectivePrice =
-                assignment.customPrice ??
+                assignment?.customPrice ??
                 service.price;
 
               const effectiveDuration =
-                assignment.customDurationMinutes ??
+                assignment?.customDurationMinutes ??
                 service.durationMinutes;
 
               return (
@@ -160,14 +148,31 @@ export default function PublicServiceSelector({
                     selected
                   }
                   className={[
-                    "flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition-all",
+                    "group flex min-h-[132px] w-full flex-col justify-between rounded-2xl border p-4 text-left transition-all",
                     "focus:outline-none focus:ring-2 focus:ring-zinc-300",
                     selected
-                      ? "border-zinc-950 bg-zinc-950 text-white shadow-sm"
-                      : "border-zinc-200 bg-white hover:border-zinc-300 hover:shadow-sm",
+                      ? "border-zinc-950 bg-zinc-950 text-white shadow-md"
+                      : "border-zinc-200 bg-zinc-50/60 hover:-translate-y-0.5 hover:border-zinc-400 hover:bg-white hover:shadow-md",
                   ].join(" ")}
                 >
-                  <div className="min-w-0 flex-1">
+                  <div className="flex w-full items-start justify-between gap-3">
+                    <span className={selected ? "flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-xs font-bold text-white" : "flex h-9 w-9 items-center justify-center rounded-xl bg-white text-xs font-bold text-zinc-700 shadow-sm ring-1 ring-zinc-200"}>
+                      {service.name.charAt(0).toUpperCase()}
+                    </span>
+
+                    <span
+                      className={[
+                        "flex h-6 w-6 items-center justify-center rounded-full border text-xs transition",
+                        selected
+                          ? "border-white bg-white text-zinc-950"
+                          : "border-zinc-300 bg-white text-transparent group-hover:border-zinc-500",
+                      ].join(" ")}
+                    >
+                      ✓
+                    </span>
+                  </div>
+
+                  <div className="mt-4 w-full min-w-0">
                     <p
                       className={[
                         "font-semibold",
@@ -183,9 +188,15 @@ export default function PublicServiceSelector({
                       }
                     </p>
 
-                    <p
+                    {service.description && (
+                      <p className={selected ? "mt-1 line-clamp-1 text-xs text-zinc-400" : "mt-1 line-clamp-1 text-xs text-zinc-500"}>
+                        {service.description}
+                      </p>
+                    )}
+
+                    <div
                       className={[
-                        "mt-1 text-sm",
+                        "mt-3 flex items-center justify-between gap-3 text-sm",
                         selected
                           ? "text-zinc-300"
                           : "text-zinc-500",
@@ -193,39 +204,17 @@ export default function PublicServiceSelector({
                         " ",
                       )}
                     >
-                      {formatDuration(
-                        effectiveDuration,
-                      )}
-                    </p>
-                  </div>
+                      <span>
+                        {formatDuration(
+                          effectiveDuration,
+                        )}
+                      </span>
 
-                  <div className="shrink-0 text-right">
-                    <p
-                      className={[
-                        "font-semibold",
-                        selected
-                          ? "text-white"
-                          : "text-zinc-950",
-                      ].join(
-                        " ",
-                      )}
-                    >
-                      {formatPrice(
-                        effectivePrice,
-                      )}
-                    </p>
-
-                    <div
-                      className={[
-                        "ml-auto mt-2 flex h-6 w-6 items-center justify-center rounded-full border",
-                        selected
-                          ? "border-white bg-white text-zinc-950"
-                          : "border-zinc-300 text-transparent",
-                      ].join(
-                        " ",
-                      )}
-                    >
-                      ✓
+                      <span className={selected ? "font-semibold text-white" : "font-semibold text-zinc-950"}>
+                        {formatPrice(
+                          effectivePrice,
+                        )}
+                      </span>
                     </div>
                   </div>
                 </button>

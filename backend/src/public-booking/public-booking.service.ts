@@ -29,6 +29,30 @@ export class PublicBookingService {
 
   /*
    * ============================================================
+   * INFORMACIÓN PÚBLICA DEL NEGOCIO
+   * ============================================================
+   */
+
+  async findBusiness(
+    slug: string,
+  ) {
+    const business =
+      await this.findPublicBusinessBySlug(
+        slug,
+      );
+
+    return {
+      slug: business.slug,
+      name: business.name,
+      phone: business.phone,
+      email: business.email,
+      address: business.address,
+      logoUrl: business.logoUrl,
+    };
+  }
+
+  /*
+   * ============================================================
    * SERVICIOS PÚBLICOS
    * ============================================================
    */
@@ -761,6 +785,10 @@ private hashManagementToken(
           id: true,
           slug: true,
           name: true,
+          phone: true,
+          email: true,
+          address: true,
+          logoUrl: true,
           timezone: true,
           currency: true,
           appointmentInterval: true,

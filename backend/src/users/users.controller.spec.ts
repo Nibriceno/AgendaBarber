@@ -1,20 +1,31 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { UserRole } from '@prisma/client';
+
 import { UsersController } from './users.controller';
-import { UsersService } from './users.service';
+import type { UsersService } from './users.service';
+import { ROLES_KEY } from '../auth/decorators/roles.decorator';
 
-describe('UsersController', () => {
-  let controller: UsersController;
+describe('UsersController client self-service routes', () => {
+  new UsersController({} as UsersService);
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [UsersController],
-      providers: [UsersService],
-    }).compile();
+  const getRoles = (
+    methodName: keyof UsersController,
+  ): UserRole[] | undefined => {
+    const method: unknown = Object.getOwnPropertyDescriptor(
+      UsersController.prototype,
+      methodName,
+    )?.value;
 
-    controller = module.get<UsersController>(UsersController);
-  });
+    if (typeof method !== 'function') {
+      throw new Error(`Método ${methodName} no encontrado.`);
+    }
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
-  });
+    return Reflect.getMetadata(ROLES_KEY, method) as UserRole[] | undefined;
+  };
+
+  it.each(['getMyProfile', 'updateMyProfile', 'changeMyPassword'] as const)(
+    'restricts %s to clients',
+    (methodName) => {
+      expect(getRoles(methodName)).toEqual([UserRole.CLIENT]);
+    },
+  );
 });

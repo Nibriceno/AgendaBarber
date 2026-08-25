@@ -1,6 +1,7 @@
 import type {
   PublicAvailability,
   PublicBarber,
+  PublicBusiness,
   PublicService,
 } from "../types/public-booking.types";
 
@@ -43,6 +44,16 @@ async function getPublicResource<T>(
   }
 
   return response.json() as Promise<T>;
+}
+
+export async function getPublicBusiness(
+  businessSlug: string,
+): Promise<PublicBusiness> {
+  return getPublicResource<PublicBusiness>(
+    `/public/${encodeURIComponent(
+      businessSlug,
+    )}/business`,
+  );
 }
 
 export async function getPublicBarbers(

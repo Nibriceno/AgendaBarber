@@ -40,6 +40,22 @@ export class PublicBookingController {
       ttl: 60_000,
     },
   })
+  @Get(':slug/business')
+  findBusiness(
+    @Param()
+    params: PublicBusinessParamsDto,
+  ) {
+    return this.publicBookingService.findBusiness(
+      params.slug,
+    );
+  }
+
+  @Throttle({
+    default: {
+      limit: 100,
+      ttl: 60_000,
+    },
+  })
   @Get(':slug/services')
   findServices(
     @Param()

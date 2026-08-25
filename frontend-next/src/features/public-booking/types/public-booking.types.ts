@@ -1,3 +1,12 @@
+export type PublicBusiness = {
+  slug: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  logoUrl: string | null;
+};
+
 export type PublicCategory = {
   id: number;
   name: string;

@@ -63,12 +63,14 @@ export function AuthGuard({
     user
       ? getDefaultRouteForRole(
           user.role,
-          businessSlug,
+          user.businessSlug,
         )
       : null;
 
   const hasAccess =
-    user
+    user &&
+    user.businessSlug ===
+      businessSlug
       ? canAccessProtectedRoute(
           pathname,
           businessSlug,
@@ -92,6 +94,20 @@ export function AuthGuard({
       return;
     }
 
+    if (
+      user.businessSlug !==
+      businessSlug
+    ) {
+      router.replace(
+        getDefaultRouteForRole(
+          user.role,
+          user.businessSlug,
+        ),
+      );
+
+      return;
+    }
+
     /*
      * Compatibilidad temporal con
      * /dashboard antiguo.
@@ -103,7 +119,7 @@ export function AuthGuard({
       router.replace(
         getDefaultRouteForRole(
           user.role,
-          businessSlug,
+          user.businessSlug,
         ),
       );
 
@@ -114,7 +130,7 @@ export function AuthGuard({
       router.replace(
         getDefaultRouteForRole(
           user.role,
-          businessSlug,
+          user.businessSlug,
         ),
       );
     }

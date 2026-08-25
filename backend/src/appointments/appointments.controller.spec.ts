@@ -1,20 +1,32 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { UserRole } from '@prisma/client';
+
 import { AppointmentsController } from './appointments.controller';
-import { AppointmentsService } from './appointments.service';
+import type { AppointmentsService } from './appointments.service';
+import { ROLES_KEY } from '../auth/decorators/roles.decorator';
 
-describe('AppointmentsController', () => {
-  let controller: AppointmentsController;
+describe('AppointmentsController client routes', () => {
+  new AppointmentsController({} as AppointmentsService);
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [AppointmentsController],
-      providers: [AppointmentsService],
-    }).compile();
+  const getRoles = (
+    methodName: keyof AppointmentsController,
+  ): UserRole[] | undefined => {
+    const method: unknown = Object.getOwnPropertyDescriptor(
+      AppointmentsController.prototype,
+      methodName,
+    )?.value;
 
-    controller = module.get<AppointmentsController>(AppointmentsController);
+    if (typeof method !== 'function') {
+      throw new Error(`Método ${methodName} no encontrado.`);
+    }
+
+    return Reflect.getMetadata(ROLES_KEY, method) as UserRole[] | undefined;
+  };
+
+  it('restricts the personal list to clients', () => {
+    expect(getRoles('findMyAppointments')).toEqual([UserRole.CLIENT]);
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
+  it('restricts client cancellation to clients', () => {
+    expect(getRoles('clientCancel')).toEqual([UserRole.CLIENT]);
   });
 });

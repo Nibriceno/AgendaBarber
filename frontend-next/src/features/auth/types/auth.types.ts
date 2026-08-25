@@ -1,16 +1,14 @@
-export type UserRole =
-  | "ADMIN"
-  | "RECEPTIONIST"
-  | "BARBER"
-  | "CLIENT";
+export type UserRole = "ADMIN" | "RECEPTIONIST" | "BARBER" | "CLIENT";
 
 export type AuthUser = {
   id: number;
   firstName: string;
   lastName: string;
-  email: string;
+  phone: string;
+  email: string | null;
   role: UserRole;
   businessId: number;
+  businessSlug: string;
 };
 
 export type LoginCredentials = {
@@ -22,4 +20,32 @@ export type LoginCredentials = {
 export type LoginResponse = {
   accessToken: string;
   user: AuthUser;
+};
+
+export type RegisterClientInput = {
+  businessSlug: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+  password: string;
+};
+
+export type RegisterClientResponse = {
+  message: string;
+  emailSent: boolean;
+};
+
+export type VerifyEmailInput = {
+  businessSlug: string;
+  token: string;
+};
+
+export type ResendVerificationInput = {
+  businessSlug: string;
+  email: string;
+};
+
+export type AuthMessageResponse = {
+  message: string;
 };

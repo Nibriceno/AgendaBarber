@@ -84,6 +84,12 @@ export class JwtStrategy extends PassportStrategy(
           lastName: true,
           phone: true,
           email: true,
+
+          business: {
+            select: {
+              slug: true,
+            },
+          },
         },
       });
 
@@ -93,6 +99,19 @@ export class JwtStrategy extends PassportStrategy(
       );
     }
 
-    return user;
+    return {
+      id: user.id,
+      businessId:
+        user.businessId,
+      businessSlug:
+        user.business.slug,
+      role: user.role,
+      firstName:
+        user.firstName,
+      lastName:
+        user.lastName,
+      phone: user.phone,
+      email: user.email,
+    };
   }
 }

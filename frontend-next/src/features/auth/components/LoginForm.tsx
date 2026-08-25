@@ -21,7 +21,13 @@ import {
 
 import {
   getApiErrorMessage,
+  getApiErrorStatus,
 } from "@/lib/api/errors";
+
+import Link from "next/link";
+import {
+  AUTH_INPUT_CLASS_NAME,
+} from "../config/auth-form.styles";
 
 export default function LoginForm() {
   const router =
@@ -64,6 +70,11 @@ export default function LoginForm() {
     useState("");
 
   const [
+    needsVerification,
+    setNeedsVerification,
+  ] = useState(false);
+
+  const [
     submitting,
     setSubmitting,
   ] =
@@ -87,7 +98,7 @@ export default function LoginForm() {
     router.replace(
       getDefaultRouteForRole(
         user.role,
-        businessSlug,
+        user.businessSlug,
       ),
     );
   }, [
@@ -110,6 +121,7 @@ export default function LoginForm() {
       }
 
       setError("");
+      setNeedsVerification(false);
 
       if (!businessSlug) {
         setError(
@@ -163,10 +175,14 @@ export default function LoginForm() {
         router.replace(
           getDefaultRouteForRole(
             authenticatedUser.role,
-            businessSlug,
+            authenticatedUser.businessSlug,
           ),
         );
       } catch (error) {
+        setNeedsVerification(
+          getApiErrorStatus(error) === 403,
+        );
+
         setError(
           getApiErrorMessage(
             error,
@@ -212,7 +228,7 @@ export default function LoginForm() {
           autoComplete="email"
           autoCapitalize="none"
           spellCheck={false}
-          className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none transition focus:border-zinc-900 focus:ring-2 focus:ring-zinc-100"
+          className={AUTH_INPUT_CLASS_NAME}
           placeholder="correo@ejemplo.com"
         />
       </div>
@@ -240,17 +256,26 @@ export default function LoginForm() {
           }
           required
           autoComplete="current-password"
-          className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none transition focus:border-zinc-900 focus:ring-2 focus:ring-zinc-100"
+          className={AUTH_INPUT_CLASS_NAME}
         />
       </div>
 
       {error && (
-        <p
+        <div
           role="alert"
-          className="text-sm text-red-600"
+          className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"
         >
-          {error}
-        </p>
+          <p>{error}</p>
+
+          {needsVerification && businessSlug && (
+            <Link
+              href={`/${businessSlug}/verify-email`}
+              className="mt-2 inline-flex font-semibold underline underline-offset-4"
+            >
+              Reenviar correo de verificación
+            </Link>
+          )}
+        </div>
       )}
 
       <button
@@ -265,6 +290,18 @@ export default function LoginForm() {
           ? "Ingresando..."
           : "Iniciar sesión"}
       </button>
+
+      {businessSlug && (
+        <p className="text-center text-sm text-zinc-500">
+          ¿Aún no tienes cuenta?{" "}
+          <Link
+            href={`/${businessSlug}/register`}
+            className="font-semibold text-zinc-950 underline-offset-4 hover:underline"
+          >
+            Regístrate
+          </Link>
+        </p>
+      )}
     </form>
   );
 }

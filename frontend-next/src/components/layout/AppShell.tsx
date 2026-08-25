@@ -25,7 +25,6 @@ import {
 } from "@/features/auth/context/AuthContext";
 
 import {
-  getDefaultRouteForRole,
   getRoleAreaLabel,
 } from "@/features/auth/lib/auth-routing";
 
@@ -75,11 +74,8 @@ export default function AppShell({
         ),
     );
 
-  const homeHref =
-    getDefaultRouteForRole(
-      user.role,
-      businessSlug,
-    );
+  const publicHomeHref =
+    `/${businessSlug}`;
 
   const areaLabel =
     getRoleAreaLabel(
@@ -117,7 +113,7 @@ export default function AppShell({
         <div className="flex h-20 items-center border-b border-zinc-100 px-6">
           <Link
             href={
-              homeHref
+              publicHomeHref
             }
             className="flex items-center gap-3"
           >
@@ -230,7 +226,7 @@ export default function AppShell({
             <div className="flex h-20 items-center justify-between border-b border-zinc-100 px-5">
               <Link
                 href={
-                  homeHref
+                  publicHomeHref
                 }
                 className="flex items-center gap-3"
                 onClick={() =>

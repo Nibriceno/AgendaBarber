@@ -4,12 +4,10 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 
-import {
-  Prisma,
-  UserRole,
-} from '@prisma/client';
+import { Prisma, UserRole } from '@prisma/client';
 
 import * as bcrypt from 'bcrypt';
 
@@ -22,12 +20,110 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { ChangeUserPasswordDto } from './dto/change-user-password.dto';
+import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
+import { ChangeMyPasswordDto } from './dto/change-my-password.dto';
+import type { AuthUser } from '../auth/interfaces/auth-user.interface';
 
 @Injectable()
 export class UsersService {
-  constructor(
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
+
+  async getMyProfile(currentUser: AuthUser) {
+    this.assertClientAccount(currentUser);
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: currentUser.id,
+        businessId: currentUser.businessId,
+        role: UserRole.CLIENT,
+        isActive: true,
+        deletedAt: null,
+      },
+      select: this.userSelect(),
+    });
+
+    if (!user) {
+      throw new NotFoundException('Cuenta de cliente no encontrada.');
+    }
+
+    return user;
+  }
+
+  async updateMyProfile(currentUser: AuthUser, dto: UpdateMyProfileDto) {
+    this.assertClientAccount(currentUser);
+
+    return this.update(currentUser.businessId, currentUser.id, {
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      phone: dto.phone,
+    });
+  }
+
+  async changeMyPassword(currentUser: AuthUser, dto: ChangeMyPasswordDto) {
+    this.assertClientAccount(currentUser);
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: currentUser.id,
+        businessId: currentUser.businessId,
+        role: UserRole.CLIENT,
+        isActive: true,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        passwordHash: true,
+      },
+    });
+
+    if (!user?.passwordHash) {
+      throw new NotFoundException('Cuenta de cliente no encontrada.');
+    }
+
+    const currentPasswordIsValid = await bcrypt.compare(
+      dto.currentPassword,
+      user.passwordHash,
+    );
+
+    if (!currentPasswordIsValid) {
+      throw new UnauthorizedException('La contraseña actual no es correcta.');
+    }
+
+    const passwordIsUnchanged = await bcrypt.compare(
+      dto.newPassword,
+      user.passwordHash,
+    );
+
+    if (passwordIsUnchanged) {
+      throw new BadRequestException(
+        'La nueva contraseña debe ser diferente a la actual.',
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, 12);
+
+    await this.prisma.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        passwordHash,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    return {
+      message: 'Tu contraseña fue actualizada correctamente.',
+    };
+  }
+
+  private assertClientAccount(currentUser: AuthUser): void {
+    if (currentUser.role !== UserRole.CLIENT) {
+      throw new ForbiddenException('Esta operación es solo para clientes.');
+    }
+  }
 
   /*
    * ============================================================
@@ -41,93 +137,59 @@ export class UsersService {
    * BARBER debe utilizar el flujo especial
    * createBarberAccess.
    */
-  async create(
-    businessId: number,
-    createUserDto: CreateUserDto,
-  ) {
-    await this.validateBusiness(
-      businessId,
-    );
+  async create(businessId: number, createUserDto: CreateUserDto) {
+    await this.validateBusiness(businessId);
 
-    this.validateAssignableRole(
-      createUserDto.role,
-    );
+    this.validateAssignableRole(createUserDto.role);
 
-    const phone =
-      createUserDto.phone.trim();
+    const phone = createUserDto.phone.trim();
 
-    const email =
-      createUserDto.email
-        ?.trim()
-        .toLowerCase();
+    const email = createUserDto.email?.trim().toLowerCase();
 
-    await this.validateDuplicatedContact(
-      businessId,
-      phone,
-      email,
-    );
+    await this.validateDuplicatedContact(businessId, phone, email);
 
-    const firstName =
-      createUserDto.firstName.trim();
+    const firstName = createUserDto.firstName.trim();
 
-    const lastName =
-      createUserDto.lastName.trim();
+    const lastName = createUserDto.lastName.trim();
 
-    if (
-      !firstName ||
-      !lastName
-    ) {
+    if (!firstName || !lastName) {
       throw new BadRequestException(
         'El nombre y el apellido son obligatorios.',
       );
     }
 
-    const passwordHash =
-      await bcrypt.hash(
-        createUserDto.password,
-        12,
-      );
+    const passwordHash = await bcrypt.hash(createUserDto.password, 12);
 
-    const data:
-      Prisma.UserUncheckedCreateInput =
-      {
-        businessId,
+    const data: Prisma.UserUncheckedCreateInput = {
+      businessId,
 
-        firstName,
-        lastName,
+      firstName,
+      lastName,
 
-        phone,
+      phone,
 
-        email:
-          email ?? null,
+      email: email ?? null,
 
-        passwordHash,
+      passwordHash,
 
-        role:
-          createUserDto.role,
+      role: createUserDto.role,
 
-        isRegistered: true,
-        isActive: true,
+      isRegistered: true,
+      isActive: true,
 
-        ...(createUserDto.birthDate && {
-          birthDate:
-            this.parseDate(
-              createUserDto.birthDate,
-            ),
-        }),
-      };
+      ...(createUserDto.birthDate && {
+        birthDate: this.parseDate(createUserDto.birthDate),
+      }),
+    };
 
     try {
       return await this.prisma.user.create({
         data,
 
-        select:
-          this.userSelect(),
+        select: this.userSelect(),
       });
     } catch (error) {
-      this.handleUniqueConstraint(
-        error,
-      );
+      this.handleUniqueConstraint(error);
 
       throw error;
     }
@@ -149,32 +211,18 @@ export class UsersService {
    * Si falla la creación o la asociación,
    * PostgreSQL revierte todo.
    */
-  async createBarberAccess(
-    businessId: number,
-    dto: CreateBarberAccessDto,
-  ) {
-    await this.validateBusiness(
-      businessId,
-    );
+  async createBarberAccess(businessId: number, dto: CreateBarberAccessDto) {
+    await this.validateBusiness(businessId);
 
-    const firstName =
-      dto.firstName.trim();
+    const firstName = dto.firstName.trim();
 
-    const lastName =
-      dto.lastName.trim();
+    const lastName = dto.lastName.trim();
 
-    const phone =
-      dto.phone.trim();
+    const phone = dto.phone.trim();
 
-    const email =
-      dto.email
-        .trim()
-        .toLowerCase();
+    const email = dto.email.trim().toLowerCase();
 
-    if (
-      !firstName ||
-      !lastName
-    ) {
+    if (!firstName || !lastName) {
       throw new BadRequestException(
         'El nombre y el apellido son obligatorios.',
       );
@@ -186,272 +234,229 @@ export class UsersService {
      * puede tardar y no queremos mantener
      * una transacción abierta innecesariamente.
      */
-    const passwordHash =
-      await bcrypt.hash(
-        dto.password,
-        12,
-      );
+    const passwordHash = await bcrypt.hash(dto.password, 12);
 
     try {
-      return await this.prisma.$transaction(
-        async (tx) => {
-          /*
-           * El barbero debe:
-           * - existir
-           * - pertenecer al tenant
-           * - estar activo
-           * - no estar eliminado
-           */
-          const barber =
-            await tx.barber.findFirst({
-              where: {
-                id:
-                  dto.barberId,
+      return await this.prisma.$transaction(async (tx) => {
+        /*
+         * El barbero debe:
+         * - existir
+         * - pertenecer al tenant
+         * - estar activo
+         * - no estar eliminado
+         */
+        const barber = await tx.barber.findFirst({
+          where: {
+            id: dto.barberId,
 
-                businessId,
+            businessId,
 
-                isActive:
-                  true,
+            isActive: true,
 
-                deletedAt:
-                  null,
-              },
+            deletedAt: null,
+          },
 
-              select: {
-                id: true,
-                userId: true,
-                displayName: true,
-              },
-            });
+          select: {
+            id: true,
+            userId: true,
+            displayName: true,
+          },
+        });
 
-          if (!barber) {
-            throw new NotFoundException(
-              'Barbero no encontrado o inactivo.',
-            );
-          }
+        if (!barber) {
+          throw new NotFoundException('Barbero no encontrado o inactivo.');
+        }
 
-          /*
-           * No permitimos más de una
-           * cuenta por perfil Barber.
-           */
-          if (
-            barber.userId !== null
-          ) {
-            throw new ConflictException(
-              'Este barbero ya tiene una cuenta de acceso asociada.',
-            );
-          }
+        /*
+         * No permitimos más de una
+         * cuenta por perfil Barber.
+         */
+        if (barber.userId !== null) {
+          throw new ConflictException(
+            'Este barbero ya tiene una cuenta de acceso asociada.',
+          );
+        }
 
-          /*
-           * Comprobación previa de teléfono.
-           */
-          const duplicatedPhone =
-            await tx.user.findFirst({
-              where: {
-                businessId,
-                phone,
-              },
+        /*
+         * Comprobación previa de teléfono.
+         */
+        const duplicatedPhone = await tx.user.findFirst({
+          where: {
+            businessId,
+            phone,
+          },
 
-              select: {
-                id: true,
-              },
-            });
+          select: {
+            id: true,
+          },
+        });
 
-          if (duplicatedPhone) {
-            throw new ConflictException(
-              'Ya existe un usuario con este teléfono en la barbería.',
-            );
-          }
+        if (duplicatedPhone) {
+          throw new ConflictException(
+            'Ya existe un usuario con este teléfono en la barbería.',
+          );
+        }
 
-          /*
-           * Comprobación previa de email.
-           */
-          const duplicatedEmail =
-            await tx.user.findFirst({
-              where: {
-                businessId,
-                email,
-              },
+        /*
+         * Comprobación previa de email.
+         */
+        const duplicatedEmail = await tx.user.findFirst({
+          where: {
+            businessId,
+            email,
+          },
 
-              select: {
-                id: true,
-              },
-            });
+          select: {
+            id: true,
+          },
+        });
 
-          if (duplicatedEmail) {
-            throw new ConflictException(
-              'Ya existe un usuario con este correo en la barbería.',
-            );
-          }
+        if (duplicatedEmail) {
+          throw new ConflictException(
+            'Ya existe un usuario con este correo en la barbería.',
+          );
+        }
 
-          /*
-           * El rol NO viene del frontend.
-           *
-           * El backend lo fuerza a BARBER.
-           */
-          const user =
-            await tx.user.create({
-              data: {
-                businessId,
+        /*
+         * El rol NO viene del frontend.
+         *
+         * El backend lo fuerza a BARBER.
+         */
+        const user = await tx.user.create({
+          data: {
+            businessId,
 
-                firstName,
-                lastName,
+            firstName,
+            lastName,
 
-                phone,
-                email,
+            phone,
+            email,
 
-                passwordHash,
+            passwordHash,
 
-                role:
-                  UserRole.BARBER,
+            role: UserRole.BARBER,
 
-                isRegistered:
-                  true,
+            isRegistered: true,
 
-                isActive:
-                  true,
-              },
+            isActive: true,
+          },
 
-              select: {
-                id: true,
-              },
-            });
+          select: {
+            id: true,
+          },
+        });
 
-          /*
-           * updateMany nos permite incluir
-           * userId: null en la condición.
-           *
-           * Así protegemos también el caso
-           * de dos requests concurrentes
-           * intentando enlazar el mismo barbero.
-           */
-          const linkResult =
-            await tx.barber.updateMany({
-              where: {
-                id:
-                  barber.id,
+        /*
+         * updateMany nos permite incluir
+         * userId: null en la condición.
+         *
+         * Así protegemos también el caso
+         * de dos requests concurrentes
+         * intentando enlazar el mismo barbero.
+         */
+        const linkResult = await tx.barber.updateMany({
+          where: {
+            id: barber.id,
 
-                businessId,
+            businessId,
 
-                isActive:
-                  true,
+            isActive: true,
 
-                deletedAt:
-                  null,
+            deletedAt: null,
 
-                userId:
-                  null,
-              },
+            userId: null,
+          },
 
-              data: {
-                userId:
-                  user.id,
-              },
-            });
+          data: {
+            userId: user.id,
+          },
+        });
 
-          if (
-            linkResult.count !== 1
-          ) {
-            throw new ConflictException(
-              'El barbero fue vinculado a otra cuenta mientras se procesaba la solicitud.',
-            );
-          }
+        if (linkResult.count !== 1) {
+          throw new ConflictException(
+            'El barbero fue vinculado a otra cuenta mientras se procesaba la solicitud.',
+          );
+        }
 
-          /*
-           * Recuperamos el usuario ya
-           * completamente relacionado.
-           */
-          const linkedUser =
-            await tx.user.findUnique({
-              where: {
-                id:
-                  user.id,
-              },
+        /*
+         * Recuperamos el usuario ya
+         * completamente relacionado.
+         */
+        const linkedUser = await tx.user.findUnique({
+          where: {
+            id: user.id,
+          },
 
-              select:
-                this.userSelect(),
-            });
+          select: this.userSelect(),
+        });
 
-          if (!linkedUser) {
-            throw new NotFoundException(
-              'No fue posible recuperar el usuario creado.',
-            );
-          }
+        if (!linkedUser) {
+          throw new NotFoundException(
+            'No fue posible recuperar el usuario creado.',
+          );
+        }
 
-          return linkedUser;
-        },
-      );
+        return linkedUser;
+      });
     } catch (error) {
-      this.handleUniqueConstraint(
-        error,
-      );
+      this.handleUniqueConstraint(error);
 
       throw error;
     }
   }
 
-  async findBarbersWithoutAccess(
-  businessId: number,
-) {
-  await this.validateBusiness(
-    businessId,
-  );
+  async findBarbersWithoutAccess(businessId: number) {
+    await this.validateBusiness(businessId);
 
-  return this.prisma.barber.findMany({
-    where: {
-      businessId,
+    return this.prisma.barber.findMany({
+      where: {
+        businessId,
 
-      userId: null,
+        userId: null,
 
-      isActive: true,
+        isActive: true,
 
-      deletedAt: null,
-    },
-
-    select: {
-      id: true,
-      displayName: true,
-      specialty: true,
-      photoUrl: true,
-    },
-
-    orderBy: [
-      {
-        displayOrder: 'asc',
+        deletedAt: null,
       },
-      {
-        displayName: 'asc',
+
+      select: {
+        id: true,
+        displayName: true,
+        specialty: true,
+        photoUrl: true,
       },
-    ],
-  });
-}
+
+      orderBy: [
+        {
+          displayOrder: 'asc',
+        },
+        {
+          displayName: 'asc',
+        },
+      ],
+    });
+  }
 
   /*
    * ============================================================
    * LISTAR USUARIOS DEL TENANT
    * ============================================================
    */
-  async findAll(
-    businessId: number,
-  ) {
+  async findAll(businessId: number) {
     return this.prisma.user.findMany({
       where: {
         businessId,
-        deletedAt:
-          null,
+        deletedAt: null,
       },
 
-      select:
-        this.userSelect(),
+      select: this.userSelect(),
 
       orderBy: [
         {
-          firstName:
-            'asc',
+          firstName: 'asc',
         },
         {
-          lastName:
-            'asc',
+          lastName: 'asc',
         },
       ],
     });
@@ -462,32 +467,24 @@ export class UsersService {
    * LISTAR USUARIOS POR BUSINESS
    * ============================================================
    */
-  async findByBusiness(
-    businessId: number,
-  ) {
-    await this.validateBusiness(
-      businessId,
-    );
+  async findByBusiness(businessId: number) {
+    await this.validateBusiness(businessId);
 
     return this.prisma.user.findMany({
       where: {
         businessId,
 
-        deletedAt:
-          null,
+        deletedAt: null,
       },
 
-      select:
-        this.userSelect(),
+      select: this.userSelect(),
 
       orderBy: [
         {
-          firstName:
-            'asc',
+          firstName: 'asc',
         },
         {
-          lastName:
-            'asc',
+          lastName: 'asc',
         },
       ],
     });
@@ -498,28 +495,20 @@ export class UsersService {
    * BUSCAR USUARIO
    * ============================================================
    */
-  async findOne(
-    businessId: number,
-    id: number,
-  ) {
-    const user =
-      await this.prisma.user.findFirst({
-        where: {
-          id,
-          businessId,
+  async findOne(businessId: number, id: number) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id,
+        businessId,
 
-          deletedAt:
-            null,
-        },
+        deletedAt: null,
+      },
 
-        select:
-          this.userSelect(),
-      });
+      select: this.userSelect(),
+    });
 
     if (!user) {
-      throw new NotFoundException(
-        'Usuario no encontrado.',
-      );
+      throw new NotFoundException('Usuario no encontrado.');
     }
 
     return user;
@@ -537,103 +526,67 @@ export class UsersService {
    *
    * Esos cambios tienen endpoints separados.
    */
-  async update(
-    businessId: number,
-    id: number,
-    updateUserDto: UpdateUserDto,
-  ) {
-    const currentUser =
-      await this.prisma.user.findFirst({
-        where: {
-          id,
-          businessId,
+  async update(businessId: number, id: number, updateUserDto: UpdateUserDto) {
+    const currentUser = await this.prisma.user.findFirst({
+      where: {
+        id,
+        businessId,
 
-          deletedAt:
-            null,
-        },
-      });
+        deletedAt: null,
+      },
+    });
 
     if (!currentUser) {
-      throw new NotFoundException(
-        'Usuario no encontrado.',
-      );
+      throw new NotFoundException('Usuario no encontrado.');
     }
 
     const phone =
-      updateUserDto.phone !==
-      undefined
+      updateUserDto.phone !== undefined
         ? updateUserDto.phone.trim()
         : currentUser.phone;
 
     const email =
-      updateUserDto.email !==
-      undefined
-        ? updateUserDto.email
-            .trim()
-            .toLowerCase()
-        : currentUser.email ??
-          undefined;
+      updateUserDto.email !== undefined
+        ? updateUserDto.email.trim().toLowerCase()
+        : (currentUser.email ?? undefined);
 
-    await this.validateDuplicatedContact(
-      businessId,
-      phone,
-      email,
-      id,
-    );
+    await this.validateDuplicatedContact(businessId, phone, email, id);
 
     if (
-      updateUserDto.firstName !==
-        undefined &&
+      updateUserDto.firstName !== undefined &&
       !updateUserDto.firstName.trim()
     ) {
-      throw new BadRequestException(
-        'El nombre no puede estar vacío.',
-      );
+      throw new BadRequestException('El nombre no puede estar vacío.');
     }
 
     if (
-      updateUserDto.lastName !==
-        undefined &&
+      updateUserDto.lastName !== undefined &&
       !updateUserDto.lastName.trim()
     ) {
-      throw new BadRequestException(
-        'El apellido no puede estar vacío.',
-      );
+      throw new BadRequestException('El apellido no puede estar vacío.');
     }
 
-    const data:
-      Prisma.UserUncheckedUpdateInput =
-      {
-        ...(updateUserDto.firstName !==
-          undefined && {
-          firstName:
-            updateUserDto.firstName.trim(),
-        }),
+    const data: Prisma.UserUncheckedUpdateInput = {
+      ...(updateUserDto.firstName !== undefined && {
+        firstName: updateUserDto.firstName.trim(),
+      }),
 
-        ...(updateUserDto.lastName !==
-          undefined && {
-          lastName:
-            updateUserDto.lastName.trim(),
-        }),
+      ...(updateUserDto.lastName !== undefined && {
+        lastName: updateUserDto.lastName.trim(),
+      }),
 
-        ...(updateUserDto.phone !==
-          undefined && {
-          phone,
-        }),
+      ...(updateUserDto.phone !== undefined && {
+        phone,
+      }),
 
-        ...(updateUserDto.email !==
-          undefined && {
-          email,
-        }),
+      ...(updateUserDto.email !== undefined && {
+        email,
+      }),
 
-        ...(updateUserDto.birthDate !==
-          undefined && {
-          birthDate:
-            this.parseDate(
-              updateUserDto.birthDate,
-            ),
-        }),
-      };
+      ...(updateUserDto.birthDate !== undefined && {
+        birthDate: this.parseDate(updateUserDto.birthDate),
+      }),
+    };
 
     try {
       return await this.prisma.user.update({
@@ -643,13 +596,10 @@ export class UsersService {
 
         data,
 
-        select:
-          this.userSelect(),
+        select: this.userSelect(),
       });
     } catch (error) {
-      this.handleUniqueConstraint(
-        error,
-      );
+      this.handleUniqueConstraint(error);
 
       throw error;
     }
@@ -660,35 +610,28 @@ export class UsersService {
    * ELIMINAR / SOFT DELETE
    * ============================================================
    */
-  async remove(
-    businessId: number,
-    id: number,
-  ) {
-    const existingUser =
-      await this.prisma.user.findFirst({
-        where: {
-          id,
-          businessId,
+  async remove(businessId: number, id: number) {
+    const existingUser = await this.prisma.user.findFirst({
+      where: {
+        id,
+        businessId,
 
-          deletedAt:
-            null,
-        },
+        deletedAt: null,
+      },
 
-        select: {
-          id: true,
+      select: {
+        id: true,
 
-          barber: {
-            select: {
-              id: true,
-            },
+        barber: {
+          select: {
+            id: true,
           },
         },
-      });
+      },
+    });
 
     if (!existingUser) {
-      throw new NotFoundException(
-        'Usuario no encontrado.',
-      );
+      throw new NotFoundException('Usuario no encontrado.');
     }
 
     /*
@@ -712,15 +655,12 @@ export class UsersService {
       },
 
       data: {
-        isActive:
-          false,
+        isActive: false,
 
-        deletedAt:
-          new Date(),
+        deletedAt: new Date(),
       },
 
-      select:
-        this.userSelect(),
+      select: this.userSelect(),
     });
   }
 
@@ -729,49 +669,36 @@ export class UsersService {
    * CAMBIAR ROL
    * ============================================================
    */
-  async updateRole(
-    businessId: number,
-    id: number,
-    dto: UpdateUserRoleDto,
-  ) {
-    const user =
-      await this.prisma.user.findFirst({
-        where: {
-          id,
-          businessId,
+  async updateRole(businessId: number, id: number, dto: UpdateUserRoleDto) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id,
+        businessId,
 
-          deletedAt:
-            null,
-        },
+        deletedAt: null,
+      },
 
-        select: {
-          id: true,
-          role: true,
+      select: {
+        id: true,
+        role: true,
 
-          barber: {
-            select: {
-              id: true,
-            },
+        barber: {
+          select: {
+            id: true,
           },
         },
-      });
+      },
+    });
 
     if (!user) {
-      throw new NotFoundException(
-        'Usuario no encontrado.',
-      );
+      throw new NotFoundException('Usuario no encontrado.');
     }
 
     /*
      * No hay cambio.
      */
-    if (
-      user.role === dto.role
-    ) {
-      return this.findOne(
-        businessId,
-        id,
-      );
+    if (user.role === dto.role) {
+      return this.findOne(businessId, id);
     }
 
     /*
@@ -781,9 +708,7 @@ export class UsersService {
      * Debe utilizarse el flujo especial,
      * que crea y vincula User + Barber.
      */
-    if (
-      dto.role === UserRole.BARBER
-    ) {
+    if (dto.role === UserRole.BARBER) {
       throw new ForbiddenException(
         'Para crear un usuario barbero debes usar el flujo de acceso de barbero.',
       );
@@ -802,9 +727,7 @@ export class UsersService {
       );
     }
 
-    this.validateAssignableRole(
-      dto.role,
-    );
+    this.validateAssignableRole(dto.role);
 
     return this.prisma.user.update({
       where: {
@@ -812,12 +735,10 @@ export class UsersService {
       },
 
       data: {
-        role:
-          dto.role,
+        role: dto.role,
       },
 
-      select:
-        this.userSelect(),
+      select: this.userSelect(),
     });
   }
 
@@ -836,33 +757,27 @@ export class UsersService {
      * Evitamos que el ADMIN se bloquee
      * accidentalmente a sí mismo.
      */
-    if (
-      id === currentUserId
-    ) {
+    if (id === currentUserId) {
       throw new ForbiddenException(
         'No puedes cambiar el estado de tu propia cuenta.',
       );
     }
 
-    const user =
-      await this.prisma.user.findFirst({
-        where: {
-          id,
-          businessId,
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id,
+        businessId,
 
-          deletedAt:
-            null,
-        },
+        deletedAt: null,
+      },
 
-        select: {
-          id: true,
-        },
-      });
+      select: {
+        id: true,
+      },
+    });
 
     if (!user) {
-      throw new NotFoundException(
-        'Usuario no encontrado.',
-      );
+      throw new NotFoundException('Usuario no encontrado.');
     }
 
     return this.prisma.user.update({
@@ -871,12 +786,10 @@ export class UsersService {
       },
 
       data: {
-        isActive:
-          dto.isActive,
+        isActive: dto.isActive,
       },
 
-      select:
-        this.userSelect(),
+      select: this.userSelect(),
     });
   }
 
@@ -890,32 +803,24 @@ export class UsersService {
     id: number,
     dto: ChangeUserPasswordDto,
   ) {
-    const user =
-      await this.prisma.user.findFirst({
-        where: {
-          id,
-          businessId,
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id,
+        businessId,
 
-          deletedAt:
-            null,
-        },
+        deletedAt: null,
+      },
 
-        select: {
-          id: true,
-        },
-      });
+      select: {
+        id: true,
+      },
+    });
 
     if (!user) {
-      throw new NotFoundException(
-        'Usuario no encontrado.',
-      );
+      throw new NotFoundException('Usuario no encontrado.');
     }
 
-    const passwordHash =
-      await bcrypt.hash(
-        dto.password,
-        12,
-      );
+    const passwordHash = await bcrypt.hash(dto.password, 12);
 
     return this.prisma.user.update({
       where: {
@@ -925,12 +830,10 @@ export class UsersService {
       data: {
         passwordHash,
 
-        isRegistered:
-          true,
+        isRegistered: true,
       },
 
-      select:
-        this.userSelect(),
+      select: this.userSelect(),
     });
   }
 
@@ -939,31 +842,23 @@ export class UsersService {
    * VALIDAR BUSINESS
    * ============================================================
    */
-  private async validateBusiness(
-    businessId: number,
-  ) {
-    const business =
-      await this.prisma.business.findFirst({
-        where: {
-          id:
-            businessId,
+  private async validateBusiness(businessId: number) {
+    const business = await this.prisma.business.findFirst({
+      where: {
+        id: businessId,
 
-          deletedAt:
-            null,
+        deletedAt: null,
 
-          isActive:
-            true,
-        },
+        isActive: true,
+      },
 
-        select: {
-          id: true,
-        },
-      });
+      select: {
+        id: true,
+      },
+    });
 
     if (!business) {
-      throw new NotFoundException(
-        'Barbería no encontrada o inactiva.',
-      );
+      throw new NotFoundException('Barbería no encontrada o inactiva.');
     }
   }
 
@@ -978,20 +873,10 @@ export class UsersService {
    * BARBER:
    * utiliza createBarberAccess().
    */
-  private validateAssignableRole(
-    role: UserRole,
-  ) {
-    const allowedRoles:
-      UserRole[] = [
-        UserRole.RECEPTIONIST,
-        UserRole.CLIENT,
-      ];
+  private validateAssignableRole(role: UserRole) {
+    const allowedRoles: UserRole[] = [UserRole.RECEPTIONIST, UserRole.CLIENT];
 
-    if (
-      !allowedRoles.includes(
-        role,
-      )
-    ) {
+    if (!allowedRoles.includes(role)) {
       throw new ForbiddenException(
         role === UserRole.BARBER
           ? 'Los usuarios barbero deben crearse desde el flujo de acceso de barbero.'
@@ -1011,25 +896,22 @@ export class UsersService {
     email?: string,
     excludedUserId?: number,
   ) {
-    const duplicatedPhone =
-      await this.prisma.user.findFirst({
-        where: {
-          businessId,
-          phone,
+    const duplicatedPhone = await this.prisma.user.findFirst({
+      where: {
+        businessId,
+        phone,
 
-          ...(excludedUserId !==
-            undefined && {
-            id: {
-              not:
-                excludedUserId,
-            },
-          }),
-        },
+        ...(excludedUserId !== undefined && {
+          id: {
+            not: excludedUserId,
+          },
+        }),
+      },
 
-        select: {
-          id: true,
-        },
-      });
+      select: {
+        id: true,
+      },
+    });
 
     if (duplicatedPhone) {
       throw new ConflictException(
@@ -1041,25 +923,22 @@ export class UsersService {
       return;
     }
 
-    const duplicatedEmail =
-      await this.prisma.user.findFirst({
-        where: {
-          businessId,
-          email,
+    const duplicatedEmail = await this.prisma.user.findFirst({
+      where: {
+        businessId,
+        email,
 
-          ...(excludedUserId !==
-            undefined && {
-            id: {
-              not:
-                excludedUserId,
-            },
-          }),
-        },
+        ...(excludedUserId !== undefined && {
+          id: {
+            not: excludedUserId,
+          },
+        }),
+      },
 
-        select: {
-          id: true,
-        },
-      });
+      select: {
+        id: true,
+      },
+    });
 
     if (duplicatedEmail) {
       throw new ConflictException(
@@ -1073,12 +952,8 @@ export class UsersService {
    * FECHA
    * ============================================================
    */
-  private parseDate(
-    date: string,
-  ) {
-    return new Date(
-      `${date}T00:00:00.000Z`,
-    );
+  private parseDate(date: string) {
+    return new Date(`${date}T00:00:00.000Z`);
   }
 
   /*
@@ -1088,8 +963,7 @@ export class UsersService {
    *
    * Nunca devuelve passwordHash.
    */
-  private userSelect():
-    Prisma.UserSelect {
+  private userSelect(): Prisma.UserSelect {
     return {
       id: true,
       businessId: true,
@@ -1143,12 +1017,9 @@ export class UsersService {
    * pero la DB sigue siendo la protección
    * definitiva ante concurrencia.
    */
-  private handleUniqueConstraint(
-    error: unknown,
-  ): void {
+  private handleUniqueConstraint(error: unknown): void {
     if (
-      error instanceof
-        Prisma.PrismaClientKnownRequestError &&
+      error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2002'
     ) {
       throw new ConflictException(
