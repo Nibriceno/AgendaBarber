@@ -105,8 +105,8 @@ export default function SiteFooter() {
       <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-white/[0.04] blur-3xl" />
       <div className="pointer-events-none absolute -bottom-28 left-1/4 h-64 w-64 rounded-full bg-amber-500/[0.06] blur-3xl" />
 
-      <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-        <div className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+      <div className="relative mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
           <div>
             <Link
               href="/"
@@ -127,7 +127,7 @@ export default function SiteFooter() {
               </span>
             </Link>
 
-            <p className="mt-4 max-w-xl text-sm leading-6 text-zinc-400">
+            <p className="mt-2 max-w-xl text-xs leading-5 text-zinc-400 sm:text-sm">
               Una experiencia de reservas clara para clientes y una operación más ordenada para cada barbería.
             </p>
           </div>
@@ -160,7 +160,7 @@ export default function SiteFooter() {
           </nav>
         </div>
 
-        <div className="mt-7 flex flex-col gap-3 border-t border-white/10 pt-5 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-4 flex flex-col gap-2 border-t border-white/10 pt-3 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
           <span>
             © {currentYear} AgendaBarber. Todos los derechos reservados.
           </span>

@@ -20,8 +20,6 @@ import {
 
 import WeeklyScheduleEditor from "./WeeklyScheduleEditor";
 
-import ScheduleExceptionsPanel from "./ScheduleExceptionsPanel";
-
 function getInitials(
   name: string,
 ): string {
@@ -148,10 +146,10 @@ export default function SchedulesOverview() {
         </h1>
 
         <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">
-          Configura los días,
-          horarios normales y
-          excepciones de cada
-          profesional.
+          Configura los días y
+          bloques de atención que
+          se repetirán semanalmente
+          para cada profesional.
         </p>
       </header>
 
@@ -259,21 +257,12 @@ export default function SchedulesOverview() {
 
           {selectedBarberId !==
             null && (
-            <>
-              <WeeklyScheduleEditor
-                key={`schedule-${selectedBarberId}`}
-                barberId={
-                  selectedBarberId
-                }
-              />
-
-              <ScheduleExceptionsPanel
-                key={`exceptions-${selectedBarberId}`}
-                barberId={
-                  selectedBarberId
-                }
-              />
-            </>
+            <WeeklyScheduleEditor
+              key={`schedule-${selectedBarberId}`}
+              barberId={
+                selectedBarberId
+              }
+            />
           )}
         </>
       )}

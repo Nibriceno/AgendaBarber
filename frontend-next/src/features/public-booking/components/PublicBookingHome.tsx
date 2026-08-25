@@ -191,23 +191,10 @@ export default function PublicBookingHome({
 
   const canAdvance =
     selectedServiceIds.length > 0 &&
-    barbers.length > 0;
+    selectedBarber !== null;
 
   const handleContinue = () => {
-    if (selectedServiceIds.length === 0) {
-      return;
-    }
-
-    if (!selectedBarber) {
-      document
-        .getElementById(
-          "profesionales",
-        )
-        ?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-
+    if (!canAdvance || !selectedBarber) {
       return;
     }
 
@@ -390,9 +377,11 @@ export default function PublicBookingHome({
             }
             className="inline-flex h-12 shrink-0 items-center justify-center rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white transition hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-400 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-500"
           >
-            {!selectedBarber && selectedServiceIds.length > 0
-              ? "Elegir profesional"
-              : "Elegir horario"}
+            {selectedServiceIds.length === 0
+              ? "Elige un servicio"
+              : !selectedBarber
+                ? "Elige un profesional"
+                : "Elegir horario"}
           </button>
         </div>
       </div>

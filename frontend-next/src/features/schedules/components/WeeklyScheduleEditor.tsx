@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -28,6 +29,10 @@ import {
   minutesToTime,
   timeToMinutes,
 } from "../lib/schedule-time";
+
+import {
+  buildCurrentWeekReference,
+} from "../lib/schedule-week";
 
 import {
   getApiErrorMessage,
@@ -199,6 +204,13 @@ function validateDraft(
 export default function WeeklyScheduleEditor({
   barberId,
 }: WeeklyScheduleEditorProps) {
+  const weekReference =
+    useMemo(
+      () =>
+        buildCurrentWeekReference(),
+      [],
+    );
+
   const [
     originalSchedules,
     setOriginalSchedules,
@@ -238,6 +250,9 @@ export default function WeeklyScheduleEditor({
       async () => {
         setLoading(true);
         setError(null);
+        setSuccessMessage(
+          null,
+        );
 
         try {
           const schedules =
@@ -271,10 +286,6 @@ export default function WeeklyScheduleEditor({
     );
 
   useEffect(() => {
-    setSuccessMessage(
-      null,
-    );
-
     void loadSchedules();
   }, [
     loadSchedules,
@@ -685,14 +696,14 @@ export default function WeeklyScheduleEditor({
 
   return (
     <div>
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-zinc-950">
-            Horario semanal
+            Horario base semanal
           </h2>
 
           <p className="mt-1 text-sm text-zinc-500">
-            Define cuándo puede recibir reservas este profesional.
+            Define los días y horas que se repetirán todas las semanas.
           </p>
         </div>
 
@@ -705,6 +716,43 @@ export default function WeeklyScheduleEditor({
         >
           Aplicar lunes a mar–vie
         </button>
+      </div>
+
+      <div className="mb-5 rounded-2xl border border-zinc-200 bg-gradient-to-br from-white to-zinc-50 p-4 shadow-sm sm:p-5">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-white">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="1.8"
+            >
+              <path d="M7 3v3M17 3v3M4 9h16" />
+              <rect x="4" y="5" width="16" height="16" rx="3" />
+              <path d="M8 13h3M13 13h3M8 17h3" />
+            </svg>
+          </div>
+
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">
+              Semana actual de referencia
+            </p>
+
+            <p className="mt-1 text-base font-semibold capitalize text-zinc-950 sm:text-lg">
+              {
+                weekReference.rangeLabel
+              }
+            </p>
+
+            <p className="mt-1 text-xs leading-5 text-zinc-500 sm:text-sm">
+              Las fechas ayudan a ubicar cada día. Los cambios se aplican también a las próximas semanas.
+            </p>
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -735,6 +783,17 @@ export default function WeeklyScheduleEditor({
                 day.dayOfWeek
               }
               dayOfWeek={
+                day.dayOfWeek
+              }
+              dateLabel={
+                weekReference
+                  .dateLabels[
+                  day.dayOfWeek
+                ]
+              }
+              isToday={
+                weekReference
+                  .todayDayOfWeek ===
                 day.dayOfWeek
               }
               enabled={

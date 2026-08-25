@@ -10,6 +10,10 @@ import type {
 type ScheduleDayCardProps = {
   dayOfWeek: DayOfWeek;
 
+  dateLabel: string;
+
+  isToday: boolean;
+
   enabled: boolean;
 
   ranges: ScheduleRangeDraft[];
@@ -35,6 +39,8 @@ type ScheduleDayCardProps = {
 
 export default function ScheduleDayCard({
   dayOfWeek,
+  dateLabel,
+  isToday,
   enabled,
   ranges,
   onToggle,
@@ -46,15 +52,27 @@ export default function ScheduleDayCard({
     <article className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
       <header className="flex items-center justify-between gap-4">
         <div>
-          <h3 className="font-semibold text-zinc-950">
-            {
-              DAY_LABELS[
-                dayOfWeek
-              ]
-            }
-          </h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-semibold text-zinc-950">
+              {
+                DAY_LABELS[
+                  dayOfWeek
+                ]
+              }
+            </h3>
+
+            {isToday && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+                Hoy
+              </span>
+            )}
+          </div>
 
           <p className="mt-1 text-xs text-zinc-500">
+            <span className="font-medium text-zinc-700">
+              {dateLabel}
+            </span>
+            {" · "}
             {enabled
               ? "Día laboral"
               : "No trabaja"}

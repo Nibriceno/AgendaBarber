@@ -34,6 +34,7 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { AvailabilityModule } from './availability/availability.module';
 import { AuthModule } from './auth/auth.module';
 import { PublicBookingModule } from './public-booking/public-booking.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 
 
@@ -85,6 +86,7 @@ import { PublicBookingModule } from './public-booking/public-booking.module';
     AvailabilityModule,
     AuthModule,
     PublicBookingModule,
+    DashboardModule,
   ],
 
 
