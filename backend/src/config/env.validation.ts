@@ -110,7 +110,7 @@ export function validateEnvironment(config: EnvironmentVariables) {
   } else if (nodeEnv === 'production') {
     throw new Error('FRONTEND_URL es obligatoria en producción.');
   } else {
-    frontendUrl = 'http://localhost:5173';
+    frontendUrl = 'http://localhost:3001';
   }
 
   const rawPort = config.PORT ?? 3000;

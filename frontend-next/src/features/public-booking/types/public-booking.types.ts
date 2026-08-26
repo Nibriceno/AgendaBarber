@@ -1,3 +1,11 @@
+export type BookingPolicy = {
+  allowCancellation: boolean;
+  allowRescheduling: boolean;
+  cancellationMinimumMinutes: number;
+  rescheduleMinimumMinutes: number;
+  policyText: string | null;
+};
+
 export type PublicBusiness = {
   slug: string;
   name: string;
@@ -5,6 +13,9 @@ export type PublicBusiness = {
   email: string | null;
   address: string | null;
   logoUrl: string | null;
+  timezone: string;
+  currency: string;
+  bookingPolicy: BookingPolicy;
 };
 
 export type PublicCategory = {
@@ -126,7 +137,41 @@ export type BookingConfirmation = {
 
   managementToken?: string;
 
+  business: {
+    name: string;
+    timezone: string;
+    currency: string;
+    bookingPolicy: BookingPolicy;
+  };
+
   barber: BookingConfirmationBarber;
 
   services: BookingConfirmationService[];
+};
+
+export type ClientBookingResponse = {
+  id: number;
+  status: string;
+  startAt: string;
+  endAt: string;
+  totalDurationMinutes: number;
+  totalPrice: string | number;
+  confirmationCode: string;
+  business: {
+    name: string;
+    timezone: string;
+    currency: string;
+    cancellationMinimumMinutes: number;
+    rescheduleMinimumMinutes: number;
+    allowClientCancellation: boolean;
+    allowClientRescheduling: boolean;
+    cancellationPolicy: string | null;
+  };
+  barber: BookingConfirmationBarber;
+  services: Array<{
+    serviceId: number;
+    serviceName: string;
+    durationMinutes: number;
+    finalPrice: string | number;
+  }>;
 };

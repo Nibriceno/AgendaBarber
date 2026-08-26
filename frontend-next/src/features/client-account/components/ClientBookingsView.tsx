@@ -6,12 +6,14 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   cancelMyAppointment,
   getMyAppointments,
+  rescheduleMyAppointment,
 } from "../api/client-account.api";
 import type {
   ClientAppointment,
   ClientAppointmentStatus,
 } from "../types/client-account.types";
 import { getApiErrorMessage } from "@/lib/api/errors";
+import AppointmentReschedulePicker from "@/features/appointment-management/components/AppointmentReschedulePicker";
 
 type BookingFilter = "upcoming" | "history";
 
@@ -95,11 +97,15 @@ export default function ClientBookingsView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<BookingFilter>("upcoming");
-  const [referenceTime] = useState(() => Date.now());
+  const [referenceTime, setReferenceTime] = useState(() => Date.now());
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelError, setCancelError] = useState("");
   const [submittingCancellation, setSubmittingCancellation] = useState(false);
+  const [reschedulingId, setReschedulingId] = useState<number | null>(null);
+  const [rescheduleError, setRescheduleError] = useState("");
+  const [submittingReschedule, setSubmittingReschedule] = useState(false);
+  const [notice, setNotice] = useState("");
 
   const loadAppointments = useCallback(async () => {
     setLoading(true);
@@ -107,6 +113,7 @@ export default function ClientBookingsView({
 
     try {
       setAppointments(await getMyAppointments());
+      setReferenceTime(Date.now());
     } catch (requestError) {
       setError(
         getApiErrorMessage(requestError, "No pudimos cargar tus reservas."),
@@ -123,6 +130,7 @@ export default function ClientBookingsView({
       .then((loadedAppointments) => {
         if (active) {
           setAppointments(loadedAppointments);
+          setReferenceTime(Date.now());
         }
       })
       .catch((requestError: unknown) => {
@@ -140,6 +148,26 @@ export default function ClientBookingsView({
 
     return () => {
       active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const timer = window.setInterval(() => {
+      void getMyAppointments()
+        .then((loadedAppointments) => {
+          if (!active) return;
+          setAppointments(loadedAppointments);
+          setReferenceTime(Date.now());
+        })
+        .catch(() => {
+          // Conservamos la última vista válida ante un fallo temporal de red.
+        });
+    }, 60_000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
     };
   }, []);
 
@@ -167,9 +195,52 @@ export default function ClientBookingsView({
     filter === "upcoming" ? upcomingAppointments : historicAppointments;
 
   const openCancellation = (appointmentId: number) => {
+    setReschedulingId(null);
     setCancellingId(appointmentId);
     setCancelReason("");
     setCancelError("");
+  };
+
+  const openReschedule = (appointmentId: number) => {
+    setCancellingId(null);
+    setCancelReason("");
+    setReschedulingId(appointmentId);
+    setRescheduleError("");
+    setNotice("");
+  };
+
+  const closeReschedule = () => {
+    if (submittingReschedule) return;
+    setReschedulingId(null);
+    setRescheduleError("");
+  };
+
+  const handleReschedule = async (appointmentId: number, startAt: string) => {
+    setSubmittingReschedule(true);
+    setRescheduleError("");
+    setNotice("");
+
+    try {
+      const updatedAppointment = await rescheduleMyAppointment(
+        appointmentId,
+        startAt,
+      );
+      setAppointments((current) =>
+        current.map((appointment) =>
+          appointment.id === updatedAppointment.id
+            ? updatedAppointment
+            : appointment,
+        ),
+      );
+      setReschedulingId(null);
+      setNotice("Tu reserva fue reprogramada correctamente.");
+    } catch (requestError) {
+      setRescheduleError(
+        getApiErrorMessage(requestError, "No pudimos reprogramar la reserva."),
+      );
+    } finally {
+      setSubmittingReschedule(false);
+    }
   };
 
   const closeCancellation = () => {
@@ -214,6 +285,7 @@ export default function ClientBookingsView({
       );
       setCancellingId(null);
       setCancelReason("");
+      setNotice("Tu reserva fue cancelada correctamente.");
     } catch (requestError) {
       setCancelError(
         getApiErrorMessage(requestError, "No pudimos cancelar la reserva."),
@@ -285,6 +357,12 @@ export default function ClientBookingsView({
         ))}
       </div>
 
+      {notice && (
+        <p role="status" className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {notice}
+        </p>
+      )}
+
       {loading ? (
         <div aria-live="polite" className="mt-6 space-y-4">
           {[0, 1].map((item) => (
@@ -335,10 +413,23 @@ export default function ClientBookingsView({
         <div className="mt-6 space-y-4">
           {visibleAppointments.map((appointment) => {
             const status = STATUS_PRESENTATION[appointment.status];
-            const canCancel =
+            const hasManageableStatus =
               appointment.status === "PENDING" ||
               appointment.status === "CONFIRMED";
+            const minutesUntilStart =
+              (new Date(appointment.startAt).getTime() - referenceTime) / 60_000;
+            const canCancel =
+              hasManageableStatus &&
+              appointment.business.allowClientCancellation &&
+              minutesUntilStart >=
+                appointment.business.cancellationMinimumMinutes;
+            const canReschedule =
+              hasManageableStatus &&
+              appointment.business.allowClientRescheduling &&
+              minutesUntilStart >=
+                appointment.business.rescheduleMinimumMinutes;
             const cancellationOpen = cancellingId === appointment.id;
+            const rescheduleOpen = reschedulingId === appointment.id;
 
             return (
               <article
@@ -386,24 +477,49 @@ export default function ClientBookingsView({
                         Motivo de cancelación: {appointment.cancellationReason}
                       </p>
                     )}
+                    {hasManageableStatus && appointment.business.cancellationPolicy && (
+                      <p className="mt-3 text-xs leading-5 text-zinc-500">
+                        {appointment.business.cancellationPolicy}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between gap-4 border-t border-zinc-100 pt-4 md:block md:border-l md:border-t-0 md:pl-6 md:pt-0 md:text-right">
                     <p className="text-lg font-semibold">
                       {formatPrice(appointment)}
                     </p>
-                    {canCancel && filter === "upcoming" ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          cancellationOpen
-                            ? closeCancellation()
-                            : openCancellation(appointment.id)
-                        }
-                        className="mt-0 text-sm font-semibold text-red-700 underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-red-200 md:mt-4"
-                      >
-                        {cancellationOpen ? "Cerrar" : "Cancelar reserva"}
-                      </button>
+                    {hasManageableStatus && filter === "upcoming" ? (
+                      <div className="mt-0 flex flex-wrap justify-end gap-2 md:mt-4 md:max-w-44">
+                        <button
+                          type="button"
+                          disabled={!canReschedule}
+                          onClick={() =>
+                            rescheduleOpen
+                              ? closeReschedule()
+                              : openReschedule(appointment.id)
+                          }
+                          className="min-h-10 rounded-xl border border-zinc-300 px-3 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          {rescheduleOpen ? "Cerrar" : "Reprogramar"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!canCancel}
+                          onClick={() =>
+                            cancellationOpen
+                              ? closeCancellation()
+                              : openCancellation(appointment.id)
+                          }
+                          className="min-h-10 rounded-xl px-3 text-xs font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          {cancellationOpen ? "Cerrar" : "Cancelar"}
+                        </button>
+                        {(!canCancel || !canReschedule) && (
+                          <p className="w-full text-right text-[11px] leading-4 text-zinc-400">
+                            Las acciones desactivadas están fuera del plazo definido por la barbería.
+                          </p>
+                        )}
+                      </div>
                     ) : filter === "history" ? (
                       <Link
                         href={`/${businessSlug}`}
@@ -414,6 +530,23 @@ export default function ClientBookingsView({
                     ) : null}
                   </div>
                 </div>
+
+                {rescheduleOpen && (
+                  <AppointmentReschedulePicker
+                    businessSlug={businessSlug}
+                    barberId={appointment.barber.id}
+                    serviceIds={appointment.services.map(
+                      (service) => service.serviceId,
+                    )}
+                    timeZone={appointment.business.timezone}
+                    submitting={submittingReschedule}
+                    error={rescheduleError}
+                    onCancel={closeReschedule}
+                    onConfirm={(startAt) =>
+                      handleReschedule(appointment.id, startAt)
+                    }
+                  />
+                )}
 
                 {cancellationOpen && (
                   <form

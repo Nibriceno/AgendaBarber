@@ -3,18 +3,27 @@ import {
   ConflictException,
   Injectable,
   ForbiddenException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { AppointmentStatus, DayOfWeek, Prisma, UserRole } from '@prisma/client';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailService } from '../email/email.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
 import { AuthUser } from '../auth/interfaces/auth-user.interface';
 import { ClientRescheduleAppointmentDto } from './dto/client-reschedule-appointment.dto';
 import { BarberUpdateStatusDto } from './dto/barber-update-status.dto';
+import { BarberAppointmentsQueryDto } from './dto/barber-appointments-query.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
+import {
+  addDaysToDateKey,
+  getLocalDateKey,
+  isValidDateKey,
+  localDateMinuteToUtc,
+} from '../common/time/local-date';
 
 type PrismaClientLike = PrismaService | Prisma.TransactionClient;
 
@@ -34,7 +43,12 @@ type GuestAppointmentInput = {
 
 @Injectable()
 export class AppointmentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(AppointmentsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailService?: EmailService,
+  ) {}
 
   async findOneAuthorized(id: number, currentUser: AuthUser) {
     const appointment = await this.findOne(currentUser.businessId, id);
@@ -109,9 +123,29 @@ export class AppointmentsService {
     });
   }
 
-  async findMyBarberAppointments(currentUser: AuthUser) {
+  async findMyBarberAppointments(
+    currentUser: AuthUser,
+    query: BarberAppointmentsQueryDto = {},
+  ) {
     if (currentUser.role !== UserRole.BARBER) {
       throw new ForbiddenException('Esta ruta es solo para barberos');
+    }
+
+    const business = await this.prisma.business.findFirst({
+      where: {
+        id: currentUser.businessId,
+        isActive: true,
+        deletedAt: null,
+      },
+      select: {
+        timezone: true,
+        barberStartEarlyMinutes: true,
+        noShowGraceMinutes: true,
+      },
+    });
+
+    if (!business) {
+      throw new NotFoundException('Barbería no encontrada.');
     }
 
     const barber = await this.prisma.barber.findFirst({
@@ -121,6 +155,13 @@ export class AppointmentsService {
         isActive: true,
         deletedAt: null,
       },
+      select: {
+        id: true,
+        displayName: true,
+        specialty: true,
+        photoUrl: true,
+        calendarColor: true,
+      },
     });
 
     if (!barber) {
@@ -129,17 +170,41 @@ export class AppointmentsService {
       );
     }
 
-    return this.prisma.appointment.findMany({
+    const date = query.date ?? getLocalDateKey(new Date(), business.timezone);
+
+    if (!isValidDateKey(date)) {
+      throw new BadRequestException('La fecha seleccionada no es válida.');
+    }
+
+    const nextDate = addDaysToDateKey(date, 1);
+
+    const appointments = await this.prisma.appointment.findMany({
       where: {
         businessId: currentUser.businessId,
         barberId: barber.id,
         deletedAt: null,
+        startAt: {
+          gte: localDateMinuteToUtc(date, 0, business.timezone),
+          lt: localDateMinuteToUtc(nextDate, 0, business.timezone),
+        },
       },
-      include: this.appointmentInclude(),
+      select: this.barberAppointmentSelect(),
       orderBy: {
         startAt: 'asc',
       },
     });
+
+    return {
+      generatedAt: new Date().toISOString(),
+      date,
+      timezone: business.timezone,
+      policies: {
+        barberStartEarlyMinutes: business.barberStartEarlyMinutes,
+        noShowGraceMinutes: business.noShowGraceMinutes,
+      },
+      barber,
+      appointments,
+    };
   }
 
   async updateAuthorized(
@@ -218,7 +283,7 @@ export class AppointmentsService {
       currentUser.role === UserRole.ADMIN ||
       currentUser.role === UserRole.RECEPTIONIST;
 
-    return this.createAppointmentForCustomer({
+    const appointment = await this.createAppointmentForCustomer({
       businessId: currentUser.businessId,
       customerId,
       historyActorId: currentUser.id,
@@ -226,6 +291,20 @@ export class AppointmentsService {
       canApplyDiscount,
       createAppointmentDto,
     });
+
+    if (currentUser.role === UserRole.CLIENT) {
+      return this.prisma.appointment.findFirstOrThrow({
+        where: {
+          id: appointment.id,
+          businessId: currentUser.businessId,
+          customerId: currentUser.id,
+          deletedAt: null,
+        },
+        select: this.clientAppointmentSelect(),
+      });
+    }
+
+    return appointment;
   }
 
   private async createAppointmentForCustomer({
@@ -919,6 +998,7 @@ export class AppointmentsService {
       [AppointmentStatus.PENDING]: [
         AppointmentStatus.CONFIRMED,
         AppointmentStatus.CANCELLED,
+        AppointmentStatus.NO_SHOW,
       ],
 
       [AppointmentStatus.CONFIRMED]: [
@@ -1297,7 +1377,44 @@ export class AppointmentsService {
     } satisfies Prisma.AppointmentInclude;
   }
 
-  private clientAppointmentSelect(): Prisma.AppointmentSelect {
+  private barberAppointmentSelect(): Prisma.AppointmentSelect {
+    return {
+      id: true,
+      startAt: true,
+      endAt: true,
+      status: true,
+      totalDurationMinutes: true,
+      customerNotes: true,
+      cancellationReason: true,
+      confirmedAt: true,
+      startedAt: true,
+      completedAt: true,
+      noShowAt: true,
+      customer: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          email: true,
+        },
+      },
+      services: {
+        select: {
+          id: true,
+          serviceId: true,
+          serviceName: true,
+          durationMinutes: true,
+          displayOrder: true,
+        },
+        orderBy: {
+          displayOrder: Prisma.SortOrder.asc,
+        },
+      },
+    };
+  }
+
+  private clientAppointmentSelect() {
     return {
       id: true,
       businessId: true,
@@ -1319,6 +1436,9 @@ export class AppointmentsService {
           currency: true,
           cancellationMinimumMinutes: true,
           rescheduleMinimumMinutes: true,
+          allowClientCancellation: true,
+          allowClientRescheduling: true,
+          cancellationPolicy: true,
         },
       },
       barber: {
@@ -1342,8 +1462,83 @@ export class AppointmentsService {
           displayOrder: Prisma.SortOrder.asc,
         },
       },
-    };
+    } satisfies Prisma.AppointmentSelect;
   }
+
+  private notifyRegisteredClient(
+    currentUser: AuthUser,
+    business: { name: string; timezone: string },
+    appointment: {
+      id: number;
+      startAt: Date;
+      barber: { displayName: string };
+    },
+    action: 'rescheduled' | 'cancelled',
+  ): void {
+    if (!currentUser.email || !this.emailService) {
+      return;
+    }
+
+    const appointmentDate = new Intl.DateTimeFormat('es-CL', {
+      dateStyle: 'full',
+      timeStyle: 'short',
+      timeZone: business.timezone,
+    }).format(appointment.startAt);
+
+    void this.emailService
+      .sendBookingUpdate({
+        to: currentUser.email,
+        firstName: currentUser.firstName,
+        businessName: business.name,
+        appointmentDate,
+        barberName: appointment.barber.displayName,
+        action,
+      })
+      .catch((error: unknown) => {
+        this.logger.error(
+          `No fue posible notificar el cambio de la reserva ${appointment.id}.`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      });
+  }
+
+  private notifyNoShow(
+    appointment: {
+      id: number;
+      startAt: Date;
+      customer: {
+        firstName: string;
+        email: string | null;
+      };
+    },
+    business: { name: string; timezone: string },
+    barberName: string,
+  ): void {
+    if (!appointment.customer.email || !this.emailService) return;
+
+    const appointmentDate = new Intl.DateTimeFormat('es-CL', {
+      dateStyle: 'full',
+      timeStyle: 'short',
+      timeZone: business.timezone,
+    }).format(appointment.startAt);
+
+    void this.emailService
+      .sendBookingUpdate({
+        to: appointment.customer.email,
+        firstName: appointment.customer.firstName,
+        businessName: business.name,
+        appointmentDate,
+        barberName,
+        action: 'no_show',
+      })
+      .catch((error: unknown) => {
+        this.logger.error(
+          `No fue posible notificar la inasistencia de la reserva ${appointment.id}.`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      });
+  }
+
   async rescheduleClient(
     id: number,
     dto: ClientRescheduleAppointmentDto,
@@ -1365,6 +1560,12 @@ export class AppointmentsService {
     }
 
     const business = await this.validateBusiness(currentUser.businessId);
+
+    if (!business.allowClientRescheduling) {
+      throw new BadRequestException(
+        'La barbería no permite reprogramar reservas en línea.',
+      );
+    }
 
     const now = new Date();
 
@@ -1417,53 +1618,64 @@ export class AppointmentsService {
       business.appointmentInterval,
     );
 
-    return this.runSerializableTransaction(async (transaction) => {
-      await this.validateOverlap(
-        currentUser.businessId,
-        appointment.barberId,
-        startAt,
-        endAt,
-        appointment.id,
-        transaction,
-      );
-
-      await this.updateAppointmentOptimistically(
-        transaction,
-        {
-          id: appointment.id,
-          businessId: currentUser.businessId,
-          customerId: currentUser.id,
-          status: appointment.status,
-          deletedAt: null,
-        },
-        {
+    const updatedAppointment = await this.runSerializableTransaction(
+      async (transaction) => {
+        await this.validateOverlap(
+          currentUser.businessId,
+          appointment.barberId,
           startAt,
           endAt,
-        },
-      );
+          appointment.id,
+          transaction,
+        );
 
-      await transaction.appointmentHistory.create({
-        data: {
-          appointmentId: appointment.id,
+        await this.updateAppointmentOptimistically(
+          transaction,
+          {
+            id: appointment.id,
+            businessId: currentUser.businessId,
+            customerId: currentUser.id,
+            status: appointment.status,
+            deletedAt: null,
+          },
+          {
+            startAt,
+            endAt,
+          },
+        );
 
-          actorId: currentUser.id,
+        await transaction.appointmentHistory.create({
+          data: {
+            appointmentId: appointment.id,
 
-          previousStatus: appointment.status,
+            actorId: currentUser.id,
 
-          newStatus: appointment.status,
+            previousStatus: appointment.status,
 
-          comment: 'Reserva reprogramada por el cliente',
-        },
-      });
+            newStatus: appointment.status,
 
-      return transaction.appointment.findUniqueOrThrow({
-        where: {
-          id: appointment.id,
-        },
+            comment: 'Reserva reprogramada por el cliente',
+          },
+        });
 
-        select: this.clientAppointmentSelect(),
-      });
-    });
+        return transaction.appointment.findUniqueOrThrow({
+          where: {
+            id: appointment.id,
+          },
+
+          select: this.clientAppointmentSelect(),
+        });
+      },
+    );
+
+    this.notifyRegisteredClient(
+      currentUser,
+      business,
+      updatedAppointment,
+      'rescheduled',
+    );
+
+    return updatedAppointment;
   }
   async cancelClient(id: number, reason: string, currentUser: AuthUser) {
     if (currentUser.role !== UserRole.CLIENT) {
@@ -1481,6 +1693,12 @@ export class AppointmentsService {
 
     const business = await this.validateBusiness(currentUser.businessId);
 
+    if (!business.allowClientCancellation) {
+      throw new BadRequestException(
+        'La barbería no permite cancelar reservas en línea.',
+      );
+    }
+
     const now = new Date();
 
     const cancellationDeadline = new Date(
@@ -1496,46 +1714,57 @@ export class AppointmentsService {
 
     const cancellationReason = reason.trim();
 
-    return this.prisma.$transaction(async (transaction) => {
-      await this.updateAppointmentOptimistically(
-        transaction,
-        {
-          id: appointment.id,
-          businessId: currentUser.businessId,
-          customerId: currentUser.id,
-          status: appointment.status,
-          deletedAt: null,
-        },
-        {
-          status: AppointmentStatus.CANCELLED,
-          cancellationReason,
-          cancelledAt: now,
-          cancelledById: currentUser.id,
-        },
-      );
+    const updatedAppointment = await this.prisma.$transaction(
+      async (transaction) => {
+        await this.updateAppointmentOptimistically(
+          transaction,
+          {
+            id: appointment.id,
+            businessId: currentUser.businessId,
+            customerId: currentUser.id,
+            status: appointment.status,
+            deletedAt: null,
+          },
+          {
+            status: AppointmentStatus.CANCELLED,
+            cancellationReason,
+            cancelledAt: now,
+            cancelledById: currentUser.id,
+          },
+        );
 
-      await transaction.appointmentHistory.create({
-        data: {
-          appointmentId: appointment.id,
+        await transaction.appointmentHistory.create({
+          data: {
+            appointmentId: appointment.id,
 
-          actorId: currentUser.id,
+            actorId: currentUser.id,
 
-          previousStatus: appointment.status,
+            previousStatus: appointment.status,
 
-          newStatus: AppointmentStatus.CANCELLED,
+            newStatus: AppointmentStatus.CANCELLED,
 
-          comment: cancellationReason,
-        },
-      });
+            comment: cancellationReason,
+          },
+        });
 
-      return transaction.appointment.findUniqueOrThrow({
-        where: {
-          id: appointment.id,
-        },
+        return transaction.appointment.findUniqueOrThrow({
+          where: {
+            id: appointment.id,
+          },
 
-        select: this.clientAppointmentSelect(),
-      });
-    });
+          select: this.clientAppointmentSelect(),
+        });
+      },
+    );
+
+    this.notifyRegisteredClient(
+      currentUser,
+      business,
+      updatedAppointment,
+      'cancelled',
+    );
+
+    return updatedAppointment;
   }
 
   async updateBarberStatus(
@@ -1556,6 +1785,7 @@ export class AppointmentsService {
       },
       select: {
         id: true,
+        displayName: true,
       },
     });
 
@@ -1570,7 +1800,14 @@ export class AppointmentsService {
         barberId: barber.id,
         deletedAt: null,
       },
-      include: this.appointmentInclude(),
+      select: {
+        id: true,
+        businessId: true,
+        barberId: true,
+        startAt: true,
+        endAt: true,
+        status: true,
+      },
     });
 
     if (!appointment) {
@@ -1620,7 +1857,7 @@ export class AppointmentsService {
     }
 
     /*
-     * CONFIRMED -> NO_SHOW
+     * PENDING|CONFIRMED -> NO_SHOW
      *
      * El cliente solo puede marcarse como
      * ausente después del período de gracia.
@@ -1637,58 +1874,66 @@ export class AppointmentsService {
       }
     }
 
-    return this.prisma.$transaction(async (transaction) => {
-      await this.updateAppointmentOptimistically(
-        transaction,
-        {
-          id: appointment.id,
-          businessId: currentUser.businessId,
-          barberId: barber.id,
-          status: appointment.status,
-          deletedAt: null,
-        },
-        {
-          status: dto.status,
+    const updatedAppointment = await this.prisma.$transaction(
+      async (transaction) => {
+        await this.updateAppointmentOptimistically(
+          transaction,
+          {
+            id: appointment.id,
+            businessId: currentUser.businessId,
+            barberId: barber.id,
+            status: appointment.status,
+            deletedAt: null,
+          },
+          {
+            status: dto.status,
 
-          ...(dto.status === AppointmentStatus.CONFIRMED && {
-            confirmedAt: now,
-          }),
+            ...(dto.status === AppointmentStatus.CONFIRMED && {
+              confirmedAt: now,
+            }),
 
-          ...(dto.status === AppointmentStatus.IN_PROGRESS && {
-            startedAt: now,
-          }),
+            ...(dto.status === AppointmentStatus.IN_PROGRESS && {
+              startedAt: now,
+            }),
 
-          ...(dto.status === AppointmentStatus.COMPLETED && {
-            completedAt: now,
-          }),
+            ...(dto.status === AppointmentStatus.COMPLETED && {
+              completedAt: now,
+            }),
 
-          ...(dto.status === AppointmentStatus.NO_SHOW && {
-            noShowAt: now,
-          }),
-        },
-      );
+            ...(dto.status === AppointmentStatus.NO_SHOW && {
+              noShowAt: now,
+            }),
+          },
+        );
 
-      await transaction.appointmentHistory.create({
-        data: {
-          appointmentId: appointment.id,
+        await transaction.appointmentHistory.create({
+          data: {
+            appointmentId: appointment.id,
 
-          actorId: currentUser.id,
+            actorId: currentUser.id,
 
-          previousStatus: appointment.status,
+            previousStatus: appointment.status,
 
-          newStatus: dto.status,
+            newStatus: dto.status,
 
-          comment: 'Estado actualizado por el barbero',
-        },
-      });
+            comment: 'Estado actualizado por el barbero',
+          },
+        });
 
-      return transaction.appointment.findUniqueOrThrow({
-        where: {
-          id: appointment.id,
-        },
-        include: this.appointmentInclude(),
-      });
-    });
+        return transaction.appointment.findUniqueOrThrow({
+          where: {
+            id: appointment.id,
+          },
+          select: this.barberAppointmentSelect(),
+        });
+      },
+    );
+
+    if (dto.status === AppointmentStatus.NO_SHOW) {
+      this.notifyNoShow(updatedAppointment, business, barber.displayName);
+    }
+
+    return updatedAppointment;
   }
 
   async cancelAuthorized(
@@ -1804,6 +2049,12 @@ export class AppointmentsService {
     }
 
     const business = await this.validateBusiness(businessId);
+
+    if (!business.allowClientRescheduling) {
+      throw new BadRequestException(
+        'La barbería no permite reprogramar reservas en línea.',
+      );
+    }
 
     const now = new Date();
 
@@ -1949,6 +2200,12 @@ export class AppointmentsService {
     }
 
     const business = await this.validateBusiness(businessId);
+
+    if (!business.allowClientCancellation) {
+      throw new BadRequestException(
+        'La barbería no permite cancelar reservas en línea.',
+      );
+    }
 
     const now = new Date();
 

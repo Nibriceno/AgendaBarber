@@ -23,6 +23,9 @@ export type ClientAppointment = {
     currency: string;
     cancellationMinimumMinutes: number;
     rescheduleMinimumMinutes: number;
+    allowClientCancellation: boolean;
+    allowClientRescheduling: boolean;
+    cancellationPolicy: string | null;
   };
   barber: {
     id: number;

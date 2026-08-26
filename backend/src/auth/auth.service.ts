@@ -23,6 +23,8 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 import { EmailService } from '../email/email.service';
 
@@ -53,6 +55,10 @@ type MessageResponse = {
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
 const EMAIL_RESEND_COOLDOWN_MS = 60 * 1000;
+
+const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
+
+const PASSWORD_RESET_COOLDOWN_MS = 60 * 1000;
 
 @Injectable()
 export class AuthService {
@@ -122,6 +128,7 @@ export class AuthService {
         role: true,
         passwordHash: true,
         emailVerified: true,
+        authVersion: true,
       },
     });
 
@@ -148,6 +155,7 @@ export class AuthService {
       sub: user.id,
       businessId: user.businessId,
       role: user.role,
+      authVersion: user.authVersion,
     };
 
     const accessToken = await this.jwtService.signAsync(payload);
@@ -527,6 +535,215 @@ export class AuthService {
     return genericResponse;
   }
 
+  async forgotPassword(
+    forgotPasswordDto: ForgotPasswordDto,
+  ): Promise<MessageResponse> {
+    const normalizedBusinessSlug = forgotPasswordDto.businessSlug
+      .trim()
+      .toLowerCase();
+
+    const normalizedEmail = forgotPasswordDto.email.trim().toLowerCase();
+
+    const genericResponse = {
+      message:
+        'Si existe una cuenta asociada a ese correo, enviaremos un enlace para restablecer la contraseña.',
+    };
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        email: normalizedEmail,
+        isRegistered: true,
+        isActive: true,
+        deletedAt: null,
+        business: {
+          slug: normalizedBusinessSlug,
+          isActive: true,
+          deletedAt: null,
+        },
+      },
+      select: {
+        id: true,
+        firstName: true,
+        email: true,
+        passwordResetSentAt: true,
+        business: {
+          select: {
+            name: true,
+            slug: true,
+          },
+        },
+      },
+    });
+
+    if (!user?.email) {
+      return genericResponse;
+    }
+
+    if (
+      user.passwordResetSentAt &&
+      Date.now() - user.passwordResetSentAt.getTime() <
+        PASSWORD_RESET_COOLDOWN_MS
+    ) {
+      return genericResponse;
+    }
+
+    const reset = this.createPasswordResetToken();
+
+    const sentAt = new Date();
+
+    const updated = await this.prisma.user.updateMany({
+      where: {
+        id: user.id,
+        OR: [
+          {
+            passwordResetSentAt: null,
+          },
+          {
+            passwordResetSentAt: {
+              lt: new Date(sentAt.getTime() - PASSWORD_RESET_COOLDOWN_MS),
+            },
+          },
+        ],
+      },
+      data: {
+        passwordResetTokenHash: reset.hash,
+        passwordResetExpiresAt: reset.expiresAt,
+        passwordResetSentAt: sentAt,
+      },
+    });
+
+    if (updated.count !== 1) {
+      return genericResponse;
+    }
+
+    try {
+      await this.sendPasswordReset({
+        email: user.email,
+        firstName: user.firstName,
+        businessName: user.business.name,
+        businessSlug: user.business.slug,
+        token: reset.token,
+      });
+    } catch (error) {
+      await this.prisma.user.updateMany({
+        where: {
+          id: user.id,
+          passwordResetTokenHash: reset.hash,
+        },
+        data: {
+          passwordResetTokenHash: null,
+          passwordResetExpiresAt: null,
+          passwordResetSentAt: null,
+        },
+      });
+
+      this.logger.error(
+        `No se pudo enviar la recuperación de contraseña del usuario ${user.id}.`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+
+    return genericResponse;
+  }
+
+  async resetPassword(
+    resetPasswordDto: ResetPasswordDto,
+  ): Promise<MessageResponse> {
+    const normalizedBusinessSlug = resetPasswordDto.businessSlug
+      .trim()
+      .toLowerCase();
+
+    const tokenHash = this.hashPasswordResetToken(resetPasswordDto.token);
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        passwordResetTokenHash: tokenHash,
+        isRegistered: true,
+        isActive: true,
+        deletedAt: null,
+        business: {
+          slug: normalizedBusinessSlug,
+          isActive: true,
+          deletedAt: null,
+        },
+      },
+      select: {
+        id: true,
+        passwordHash: true,
+        passwordResetExpiresAt: true,
+      },
+    });
+
+    const now = new Date();
+
+    if (
+      !user?.passwordHash ||
+      !user.passwordResetExpiresAt ||
+      user.passwordResetExpiresAt <= now
+    ) {
+      if (user) {
+        await this.prisma.user.updateMany({
+          where: {
+            id: user.id,
+            passwordResetTokenHash: tokenHash,
+          },
+          data: {
+            passwordResetTokenHash: null,
+            passwordResetExpiresAt: null,
+            passwordResetSentAt: null,
+          },
+        });
+      }
+
+      throw new BadRequestException(
+        'El enlace de recuperación no es válido o ya venció.',
+      );
+    }
+
+    const passwordIsUnchanged = await bcrypt.compare(
+      resetPasswordDto.password,
+      user.passwordHash,
+    );
+
+    if (passwordIsUnchanged) {
+      throw new BadRequestException(
+        'La nueva contraseña debe ser diferente a la actual.',
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(resetPasswordDto.password, 12);
+
+    const result = await this.prisma.user.updateMany({
+      where: {
+        id: user.id,
+        passwordResetTokenHash: tokenHash,
+        passwordResetExpiresAt: {
+          gt: now,
+        },
+      },
+      data: {
+        passwordHash,
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
+        passwordResetSentAt: null,
+        authVersion: {
+          increment: 1,
+        },
+      },
+    });
+
+    if (result.count !== 1) {
+      throw new BadRequestException(
+        'El enlace de recuperación no es válido o ya fue utilizado.',
+      );
+    }
+
+    return {
+      message:
+        'Contraseña actualizada. Ya puedes iniciar sesión con tu nueva contraseña.',
+    };
+  }
+
   private createEmailVerificationToken() {
     const token = randomBytes(32).toString('base64url');
 
@@ -538,6 +755,20 @@ export class AuthService {
   }
 
   private hashEmailVerificationToken(token: string): string {
+    return createHash('sha256').update(token, 'utf8').digest('hex');
+  }
+
+  private createPasswordResetToken() {
+    const token = randomBytes(32).toString('base64url');
+
+    return {
+      token,
+      hash: this.hashPasswordResetToken(token),
+      expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+    };
+  }
+
+  private hashPasswordResetToken(token: string): string {
     return createHash('sha256').update(token, 'utf8').digest('hex');
   }
 
@@ -566,6 +797,34 @@ export class AuthService {
       firstName,
       businessName,
       verificationUrl,
+    });
+  }
+
+  private async sendPasswordReset({
+    email,
+    firstName,
+    businessName,
+    businessSlug,
+    token,
+  }: {
+    email: string;
+    firstName: string;
+    businessName: string;
+    businessSlug: string;
+    token: string;
+  }): Promise<void> {
+    const publicAppUrl =
+      this.configService.getOrThrow<string>('PUBLIC_APP_URL');
+
+    const resetUrl = `${publicAppUrl}/${encodeURIComponent(
+      businessSlug,
+    )}/reset-password?token=${encodeURIComponent(token)}`;
+
+    await this.emailService.sendPasswordReset({
+      to: email,
+      firstName,
+      businessName,
+      resetUrl,
     });
   }
 }

@@ -2,11 +2,13 @@ import apiClient from "@/lib/api/client";
 import type {
   AuthUser,
   AuthMessageResponse,
+  ForgotPasswordInput,
   LoginCredentials,
   LoginResponse,
   RegisterClientInput,
   RegisterClientResponse,
   ResendVerificationInput,
+  ResetPasswordInput,
   VerifyEmailInput,
 } from "../types/auth.types";
 
@@ -57,6 +59,30 @@ export async function resendVerificationRequest(
   const response =
     await apiClient.post<AuthMessageResponse>(
       "/auth/resend-verification",
+      input,
+    );
+
+  return response.data;
+}
+
+export async function forgotPasswordRequest(
+  input: ForgotPasswordInput,
+): Promise<AuthMessageResponse> {
+  const response =
+    await apiClient.post<AuthMessageResponse>(
+      "/auth/forgot-password",
+      input,
+    );
+
+  return response.data;
+}
+
+export async function resetPasswordRequest(
+  input: ResetPasswordInput,
+): Promise<AuthMessageResponse> {
+  const response =
+    await apiClient.post<AuthMessageResponse>(
+      "/auth/reset-password",
       input,
     );
 

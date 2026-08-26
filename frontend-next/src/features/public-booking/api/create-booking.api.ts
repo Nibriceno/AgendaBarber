@@ -2,6 +2,7 @@ import apiClient from "@/lib/api/client";
 
 import type {
   BookingConfirmation,
+  ClientBookingResponse,
   CreateClientBookingInput,
   CreateGuestBookingInput,
 } from "../types/public-booking.types";
@@ -80,10 +81,41 @@ export async function createClientBooking(
   input: CreateClientBookingInput,
 ): Promise<BookingConfirmation> {
   const response =
-    await apiClient.post<BookingConfirmation>(
+    await apiClient.post<ClientBookingResponse>(
       "/appointments",
       input,
     );
 
-  return response.data;
+  const appointment = response.data;
+
+  return {
+    id: appointment.id,
+    status: appointment.status,
+    startAt: appointment.startAt,
+    endAt: appointment.endAt,
+    totalDurationMinutes: appointment.totalDurationMinutes,
+    totalPrice: appointment.totalPrice,
+    confirmationCode: appointment.confirmationCode,
+    business: {
+      name: appointment.business.name,
+      timezone: appointment.business.timezone,
+      currency: appointment.business.currency,
+      bookingPolicy: {
+        allowCancellation: appointment.business.allowClientCancellation,
+        allowRescheduling: appointment.business.allowClientRescheduling,
+        cancellationMinimumMinutes:
+          appointment.business.cancellationMinimumMinutes,
+        rescheduleMinimumMinutes:
+          appointment.business.rescheduleMinimumMinutes,
+        policyText: appointment.business.cancellationPolicy,
+      },
+    },
+    barber: appointment.barber,
+    services: appointment.services.map((service) => ({
+      id: service.serviceId,
+      name: service.serviceName,
+      durationMinutes: service.durationMinutes,
+      price: service.finalPrice,
+    })),
+  };
 }

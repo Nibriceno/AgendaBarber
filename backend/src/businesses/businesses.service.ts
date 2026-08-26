@@ -4,36 +4,16 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateBusinessDto } from './dto/create-business.dto';
 import { UpdateBusinessDto } from './dto/update-business.dto';
 
 @Injectable()
 export class BusinessesService {
-  constructor(
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  async create(createBusinessDto: CreateBusinessDto) {
-    const existingBusiness = await this.prisma.business.findUnique({
-      where: {
-        slug: createBusinessDto.slug,
-      },
-    });
-
-    if (existingBusiness) {
-      throw new ConflictException(
-        'A business with this slug already exists',
-      );
-    }
-
-    return this.prisma.business.create({
-      data: createBusinessDto,
-    });
-  }
-
-  findAll() {
+  findAll(businessId: number) {
     return this.prisma.business.findMany({
       where: {
+        id: businessId,
         deletedAt: null,
       },
       orderBy: {
@@ -42,67 +22,75 @@ export class BusinessesService {
     });
   }
 
-  async findOne(id: number) {
+  async findOne(businessId: number, id: number) {
+    if (id !== businessId) {
+      throw new NotFoundException('Negocio no encontrado');
+    }
+
     const business = await this.prisma.business.findFirst({
       where: {
-        id,
+        id: businessId,
         deletedAt: null,
       },
     });
 
     if (!business) {
-      throw new NotFoundException(
-        `Business with ID ${id} not found`,
-      );
+      throw new NotFoundException('Negocio no encontrado');
     }
 
     return business;
   }
 
   async update(
+    businessId: number,
     id: number,
     updateBusinessDto: UpdateBusinessDto,
   ) {
-    await this.findOne(id);
+    await this.findOne(businessId, id);
 
     if (updateBusinessDto.slug) {
-      const duplicatedBusiness =
-        await this.prisma.business.findFirst({
-          where: {
-            id: {
-              not: id,
-            },
-            slug: updateBusinessDto.slug,
-            deletedAt: null,
+      const duplicatedBusiness = await this.prisma.business.findFirst({
+        where: {
+          id: {
+            not: id,
           },
-        });
+          slug: updateBusinessDto.slug,
+          deletedAt: null,
+        },
+      });
 
       if (duplicatedBusiness) {
-        throw new ConflictException(
-          'A business with this slug already exists',
-        );
+        throw new ConflictException('A business with this slug already exists');
       }
     }
 
-    return this.prisma.business.update({
+    await this.prisma.business.updateMany({
       where: {
-        id,
+        id: businessId,
+        deletedAt: null,
       },
       data: updateBusinessDto,
     });
+
+    return this.findOne(businessId, id);
   }
 
-  async remove(id: number) {
-    await this.findOne(id);
+  async remove(businessId: number, id: number) {
+    await this.findOne(businessId, id);
 
-    return this.prisma.business.update({
+    await this.prisma.business.updateMany({
       where: {
-        id,
+        id: businessId,
+        deletedAt: null,
       },
       data: {
         isActive: false,
         deletedAt: new Date(),
       },
     });
+
+    return {
+      message: 'Negocio desactivado correctamente',
+    };
   }
 }

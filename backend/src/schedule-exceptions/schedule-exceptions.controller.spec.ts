@@ -8,10 +8,17 @@ describe('ScheduleExceptionsController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ScheduleExceptionsController],
-      providers: [ScheduleExceptionsService],
+      providers: [
+        {
+          provide: ScheduleExceptionsService,
+          useValue: {},
+        },
+      ],
     }).compile();
 
-    controller = module.get<ScheduleExceptionsController>(ScheduleExceptionsController);
+    controller = module.get<ScheduleExceptionsController>(
+      ScheduleExceptionsController,
+    );
   });
 
   it('should be defined', () => {

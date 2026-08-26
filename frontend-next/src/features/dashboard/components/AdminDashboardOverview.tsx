@@ -355,6 +355,26 @@ export default function AdminDashboardOverview({
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    const timer = window.setInterval(() => {
+      void getAdminDashboardSummary()
+        .then((result) => {
+          if (!active) return;
+          setSummary(result);
+          setError(null);
+        })
+        .catch(() => {
+          // Conservamos el último resumen válido ante un fallo temporal de red.
+        });
+    }, 60_000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
   const handleRefresh =
     async () => {
       if (refreshing) {

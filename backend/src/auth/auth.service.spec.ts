@@ -23,9 +23,17 @@ type CreatedUser = {
 };
 
 type UpdateUserInput = {
+  where?: Record<string, unknown>;
   data: {
     emailVerified?: boolean;
     emailVerificationTokenHash?: string | null;
+    passwordHash?: string;
+    passwordResetTokenHash?: string | null;
+    passwordResetExpiresAt?: Date | null;
+    passwordResetSentAt?: Date | null;
+    authVersion?: {
+      increment: number;
+    };
   };
 };
 
@@ -34,6 +42,13 @@ type VerificationEmailInput = {
   firstName: string;
   businessName: string;
   verificationUrl: string;
+};
+
+type PasswordResetEmailInput = {
+  to: string;
+  firstName: string;
+  businessName: string;
+  resetUrl: string;
 };
 
 describe('AuthService', () => {
@@ -60,6 +75,8 @@ describe('AuthService', () => {
   const emailService = {
     sendEmailVerification:
       jest.fn<(input: VerificationEmailInput) => Promise<void>>(),
+    sendPasswordReset:
+      jest.fn<(input: PasswordResetEmailInput) => Promise<void>>(),
   };
 
   const configService = {
@@ -69,12 +86,14 @@ describe('AuthService', () => {
   let service: AuthService;
   let createInput: CreateUserInput | undefined;
   let verificationEmailInput: VerificationEmailInput | undefined;
+  let passwordResetEmailInput: PasswordResetEmailInput | undefined;
   let updateInput: UpdateUserInput | undefined;
 
   beforeEach(() => {
     jest.clearAllMocks();
     createInput = undefined;
     verificationEmailInput = undefined;
+    passwordResetEmailInput = undefined;
     updateInput = undefined;
 
     service = new AuthService(
@@ -197,5 +216,103 @@ describe('AuthService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
 
     expect(jwtService.signAsync).not.toHaveBeenCalled();
+  });
+
+  it('responde igual cuando el correo de recuperación no existe', async () => {
+    prisma.user.findFirst.mockResolvedValue(null);
+
+    const result = await service.forgotPassword({
+      businessSlug: 'barber-booking',
+      email: 'desconocido@example.com',
+    });
+
+    expect(result.message).toContain('Si existe una cuenta');
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    expect(emailService.sendPasswordReset).not.toHaveBeenCalled();
+  });
+
+  it('envía un token de recuperación y guarda solamente su hash', async () => {
+    prisma.user.findFirst.mockResolvedValue({
+      id: 21,
+      firstName: 'Ana',
+      email: 'ana@example.com',
+      passwordResetSentAt: null,
+      business: {
+        name: 'Barber Booking',
+        slug: 'barber-booking',
+      },
+    });
+
+    prisma.user.updateMany.mockImplementation((input: UpdateUserInput) => {
+      updateInput = input;
+
+      return Promise.resolve({
+        count: 1,
+      });
+    });
+
+    emailService.sendPasswordReset.mockImplementation(
+      (input: PasswordResetEmailInput) => {
+        passwordResetEmailInput = input;
+
+        return Promise.resolve();
+      },
+    );
+
+    await service.forgotPassword({
+      businessSlug: 'barber-booking',
+      email: 'ana@example.com',
+    });
+
+    if (!updateInput || !passwordResetEmailInput) {
+      throw new Error('No se capturó la recuperación de contraseña.');
+    }
+
+    const token = new URL(passwordResetEmailInput.resetUrl).searchParams.get(
+      'token',
+    );
+
+    expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(updateInput.data.passwordResetTokenHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(updateInput.data.passwordResetTokenHash).not.toBe(token);
+    expect(updateInput.data.passwordResetExpiresAt).toBeInstanceOf(Date);
+  });
+
+  it('consume el token, actualiza la clave y revoca las sesiones existentes', async () => {
+    const currentPasswordHash = await bcrypt.hash('ClaveActual1', 4);
+
+    prisma.user.findFirst.mockResolvedValue({
+      id: 21,
+      passwordHash: currentPasswordHash,
+      passwordResetExpiresAt: new Date(Date.now() + 60_000),
+    });
+
+    prisma.user.updateMany.mockImplementation((input: UpdateUserInput) => {
+      updateInput = input;
+
+      return Promise.resolve({
+        count: 1,
+      });
+    });
+
+    const result = await service.resetPassword({
+      businessSlug: 'barber-booking',
+      token: 'b'.repeat(43),
+      password: 'ClaveNueva2',
+    });
+
+    if (!updateInput?.data.passwordHash) {
+      throw new Error('No se capturó la nueva contraseña.');
+    }
+
+    expect(result.message).toContain('actualizada');
+    await expect(
+      bcrypt.compare('ClaveNueva2', updateInput.data.passwordHash),
+    ).resolves.toBe(true);
+    expect(updateInput.data.passwordResetTokenHash).toBeNull();
+    expect(updateInput.data.passwordResetExpiresAt).toBeNull();
+    expect(updateInput.data.authVersion).toEqual({
+      increment: 1,
+    });
   });
 });

@@ -46,6 +46,17 @@ export type ResendVerificationInput = {
   email: string;
 };
 
+export type ForgotPasswordInput = {
+  businessSlug: string;
+  email: string;
+};
+
+export type ResetPasswordInput = {
+  businessSlug: string;
+  token: string;
+  password: string;
+};
+
 export type AuthMessageResponse = {
   message: string;
 };

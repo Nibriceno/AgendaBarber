@@ -26,6 +26,18 @@ export async function cancelMyAppointment(
   return response.data;
 }
 
+export async function rescheduleMyAppointment(
+  appointmentId: number,
+  startAt: string,
+): Promise<ClientAppointment> {
+  const response = await apiClient.patch<ClientAppointment>(
+    `/appointments/${appointmentId}/client-reschedule`,
+    { startAt },
+  );
+
+  return response.data;
+}
+
 export async function getMyProfile(): Promise<ClientProfile> {
   const response = await apiClient.get<ClientProfile>("/users/me/profile");
 

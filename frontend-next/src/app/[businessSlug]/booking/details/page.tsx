@@ -4,6 +4,7 @@ import {
 
 import {
   getPublicBarbers,
+  getPublicBusiness,
   getPublicServices,
 } from "@/features/public-booking/api/public-booking.api";
 
@@ -161,12 +162,17 @@ export default async function BookingDetailsPage({
   const [
     barbers,
     allServices,
+    business,
   ] = await Promise.all([
     getPublicBarbers(
       businessSlug,
     ),
 
     getPublicServices(
+      businessSlug,
+    ),
+
+    getPublicBusiness(
       businessSlug,
     ),
   ]);
@@ -238,6 +244,7 @@ export default async function BookingDetailsPage({
       startAt={
         startAt
       }
+      business={business}
     />
   );
 }

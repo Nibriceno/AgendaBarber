@@ -6,6 +6,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 
@@ -19,6 +20,7 @@ import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
 import { ClientRescheduleAppointmentDto } from './dto/client-reschedule-appointment.dto';
 import { ClientCancelAppointmentDto } from './dto/client-cancel-appointment.dto';
 import { BarberUpdateStatusDto } from './dto/barber-update-status.dto';
+import { BarberAppointmentsQueryDto } from './dto/barber-appointments-query.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -30,21 +32,12 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/interfaces/auth-user.interface';
 
 @Controller('appointments')
-@UseGuards(
-  JwtAuthGuard,
-  RolesGuard,
-)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class AppointmentsController {
-  constructor(
-    private readonly appointmentsService: AppointmentsService,
-  ) {}
+  constructor(private readonly appointmentsService: AppointmentsService) {}
 
   @Post()
-  @Roles(
-    UserRole.ADMIN,
-    UserRole.RECEPTIONIST,
-    UserRole.CLIENT,
-  )
+  @Roles(UserRole.ADMIN, UserRole.RECEPTIONIST, UserRole.CLIENT)
   create(
     @CurrentUser()
     currentUser: AuthUser,
@@ -52,24 +45,16 @@ export class AppointmentsController {
     @Body()
     dto: CreateAppointmentDto,
   ) {
-    return this.appointmentsService.create(
-      currentUser,
-      dto,
-    );
+    return this.appointmentsService.create(currentUser, dto);
   }
 
   @Get()
-  @Roles(
-    UserRole.ADMIN,
-    UserRole.RECEPTIONIST,
-  )
+  @Roles(UserRole.ADMIN, UserRole.RECEPTIONIST)
   findAll(
     @CurrentUser()
     currentUser: AuthUser,
   ) {
-    return this.appointmentsService.findAll(
-      currentUser.businessId,
-    );
+    return this.appointmentsService.findAll(currentUser.businessId);
   }
 
   @Get('my')
@@ -78,9 +63,7 @@ export class AppointmentsController {
     @CurrentUser()
     currentUser: AuthUser,
   ) {
-    return this.appointmentsService.findMyAppointments(
-      currentUser,
-    );
+    return this.appointmentsService.findMyAppointments(currentUser);
   }
 
   @Get('barber/my')
@@ -88,25 +71,23 @@ export class AppointmentsController {
   findMyBarberAppointments(
     @CurrentUser()
     currentUser: AuthUser,
+
+    @Query()
+    query: BarberAppointmentsQueryDto,
   ) {
     return this.appointmentsService.findMyBarberAppointments(
       currentUser,
+      query,
     );
   }
 
   @Get('barber/:barberId')
-  @Roles(
-    UserRole.ADMIN,
-    UserRole.RECEPTIONIST,
-  )
+  @Roles(UserRole.ADMIN, UserRole.RECEPTIONIST)
   findByBarber(
     @CurrentUser()
     currentUser: AuthUser,
 
-    @Param(
-      'barberId',
-      ParseIntPipe,
-    )
+    @Param('barberId', ParseIntPipe)
     barberId: number,
   ) {
     return this.appointmentsService.findByBarber(
@@ -116,18 +97,12 @@ export class AppointmentsController {
   }
 
   @Get('customer/:customerId')
-  @Roles(
-    UserRole.ADMIN,
-    UserRole.RECEPTIONIST,
-  )
+  @Roles(UserRole.ADMIN, UserRole.RECEPTIONIST)
   findByCustomer(
     @CurrentUser()
     currentUser: AuthUser,
 
-    @Param(
-      'customerId',
-      ParseIntPipe,
-    )
+    @Param('customerId', ParseIntPipe)
     customerId: number,
   ) {
     return this.appointmentsService.findByCustomer(
@@ -142,20 +117,13 @@ export class AppointmentsController {
     @CurrentUser()
     currentUser: AuthUser,
 
-    @Param(
-      'id',
-      ParseIntPipe,
-    )
+    @Param('id', ParseIntPipe)
     id: number,
 
     @Body()
     dto: ClientRescheduleAppointmentDto,
   ) {
-    return this.appointmentsService.rescheduleClient(
-      id,
-      dto,
-      currentUser,
-    );
+    return this.appointmentsService.rescheduleClient(id, dto, currentUser);
   }
 
   @Patch(':id/client-cancel')
@@ -164,45 +132,28 @@ export class AppointmentsController {
     @CurrentUser()
     currentUser: AuthUser,
 
-    @Param(
-      'id',
-      ParseIntPipe,
-    )
+    @Param('id', ParseIntPipe)
     id: number,
 
     @Body()
     dto: ClientCancelAppointmentDto,
   ) {
-    return this.appointmentsService.cancelClient(
-      id,
-      dto.reason,
-      currentUser,
-    );
+    return this.appointmentsService.cancelClient(id, dto.reason, currentUser);
   }
 
   @Patch(':id/reschedule')
-  @Roles(
-    UserRole.ADMIN,
-    UserRole.RECEPTIONIST,
-  )
+  @Roles(UserRole.ADMIN, UserRole.RECEPTIONIST)
   reschedule(
     @CurrentUser()
     currentUser: AuthUser,
 
-    @Param(
-      'id',
-      ParseIntPipe,
-    )
+    @Param('id', ParseIntPipe)
     id: number,
 
     @Body()
     dto: RescheduleAppointmentDto,
   ) {
-    return this.appointmentsService.rescheduleAuthorized(
-      id,
-      dto,
-      currentUser,
-    );
+    return this.appointmentsService.rescheduleAuthorized(id, dto, currentUser);
   }
 
   @Patch(':id/barber-status')
@@ -211,45 +162,28 @@ export class AppointmentsController {
     @CurrentUser()
     currentUser: AuthUser,
 
-    @Param(
-      'id',
-      ParseIntPipe,
-    )
+    @Param('id', ParseIntPipe)
     id: number,
 
     @Body()
     dto: BarberUpdateStatusDto,
   ) {
-    return this.appointmentsService.updateBarberStatus(
-      id,
-      dto,
-      currentUser,
-    );
+    return this.appointmentsService.updateBarberStatus(id, dto, currentUser);
   }
 
   @Patch(':id/cancel')
-  @Roles(
-    UserRole.ADMIN,
-    UserRole.RECEPTIONIST,
-  )
+  @Roles(UserRole.ADMIN, UserRole.RECEPTIONIST)
   cancel(
     @CurrentUser()
     currentUser: AuthUser,
 
-    @Param(
-      'id',
-      ParseIntPipe,
-    )
+    @Param('id', ParseIntPipe)
     id: number,
 
     @Body()
     dto: CancelAppointmentDto,
   ) {
-    return this.appointmentsService.cancelAuthorized(
-      id,
-      dto,
-      currentUser,
-    );
+    return this.appointmentsService.cancelAuthorized(id, dto, currentUser);
   }
 
   @Get(':id')
@@ -263,40 +197,24 @@ export class AppointmentsController {
     @CurrentUser()
     currentUser: AuthUser,
 
-    @Param(
-      'id',
-      ParseIntPipe,
-    )
+    @Param('id', ParseIntPipe)
     id: number,
   ) {
-    return this.appointmentsService.findOneAuthorized(
-      id,
-      currentUser,
-    );
+    return this.appointmentsService.findOneAuthorized(id, currentUser);
   }
 
   @Patch(':id')
-  @Roles(
-    UserRole.ADMIN,
-    UserRole.RECEPTIONIST,
-  )
+  @Roles(UserRole.ADMIN, UserRole.RECEPTIONIST)
   update(
     @CurrentUser()
     currentUser: AuthUser,
 
-    @Param(
-      'id',
-      ParseIntPipe,
-    )
+    @Param('id', ParseIntPipe)
     id: number,
 
     @Body()
     dto: UpdateAppointmentDto,
   ) {
-    return this.appointmentsService.updateAuthorized(
-      id,
-      dto,
-      currentUser,
-    );
+    return this.appointmentsService.updateAuthorized(id, dto, currentUser);
   }
 }

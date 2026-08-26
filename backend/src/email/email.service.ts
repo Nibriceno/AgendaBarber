@@ -11,6 +11,32 @@ type SendEmailVerificationInput = {
   verificationUrl: string;
 };
 
+type SendPasswordResetInput = {
+  to: string;
+  firstName: string;
+  businessName: string;
+  resetUrl: string;
+};
+
+type SendGuestBookingConfirmationInput = {
+  to: string;
+  firstName: string;
+  businessName: string;
+  appointmentDate: string;
+  barberName: string;
+  managementUrl: string;
+};
+
+type SendBookingUpdateInput = {
+  to: string;
+  firstName: string;
+  businessName: string;
+  appointmentDate: string;
+  barberName: string;
+  action: 'rescheduled' | 'cancelled' | 'no_show';
+  managementUrl?: string;
+};
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>'"]/g, (character) => {
     const entities: Record<string, string> = {
@@ -108,6 +134,187 @@ export class EmailService {
                   <p style="margin:18px 0 0;line-height:1.7;color:#52525b">Hola ${safeFirstName}, activa tu cuenta para reservar y administrar tus próximas horas.</p>
                   <a href="${safeVerificationUrl}" style="display:inline-block;margin-top:24px;padding:14px 22px;border-radius:12px;background:#18181b;color:#ffffff;text-decoration:none;font-weight:700">Confirmar mi correo</a>
                   <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#71717a">Este enlace vence en 24 horas y solo funciona una vez. Si no creaste esta cuenta, ignora este mensaje.</p>
+                </div>
+              </div>
+            </div>
+          </body>
+        </html>
+      `,
+    });
+  }
+
+  async sendPasswordReset({
+    to,
+    firstName,
+    businessName,
+    resetUrl,
+  }: SendPasswordResetInput): Promise<void> {
+    const safeFirstName = escapeHtml(firstName);
+
+    const safeBusinessName = escapeHtml(businessName);
+
+    const safeResetUrl = escapeHtml(resetUrl);
+
+    await this.transporter.sendMail({
+      from: this.from,
+      to,
+      subject: `${businessName}: restablece tu contraseña`,
+      text: [
+        `Hola ${firstName},`,
+        '',
+        `Recibimos una solicitud para restablecer la contraseña de tu cuenta en ${businessName}:`,
+        resetUrl,
+        '',
+        'El enlace vence en 30 minutos y solo puede utilizarse una vez.',
+        'Si no solicitaste este cambio, ignora este mensaje. Tu contraseña seguirá siendo la misma.',
+      ].join('\n'),
+      html: `
+        <!doctype html>
+        <html lang="es">
+          <body style="margin:0;background:#f4f4f5;font-family:Arial,sans-serif;color:#18181b">
+            <div style="padding:32px 16px">
+              <div style="max-width:560px;margin:0 auto;overflow:hidden;border-radius:24px;background:#ffffff;border:1px solid #e4e4e7">
+                <div style="padding:24px 28px;background:#09090b;color:#ffffff">
+                  <strong style="font-size:18px">${safeBusinessName}</strong>
+                  <div style="margin-top:4px;font-size:12px;color:#a1a1aa">AgendaBarber</div>
+                </div>
+                <div style="padding:32px 28px">
+                  <h1 style="margin:0;font-size:26px;line-height:1.2">Restablece tu contraseña</h1>
+                  <p style="margin:18px 0 0;line-height:1.7;color:#52525b">Hola ${safeFirstName}, utiliza el siguiente botón para crear una nueva contraseña segura.</p>
+                  <a href="${safeResetUrl}" style="display:inline-block;margin-top:24px;padding:14px 22px;border-radius:12px;background:#18181b;color:#ffffff;text-decoration:none;font-weight:700">Crear nueva contraseña</a>
+                  <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#71717a">El enlace vence en 30 minutos y solo funciona una vez. Si no solicitaste este cambio, ignora este mensaje; tu contraseña no será modificada.</p>
+                </div>
+              </div>
+            </div>
+          </body>
+        </html>
+      `,
+    });
+  }
+
+  async sendGuestBookingConfirmation({
+    to,
+    firstName,
+    businessName,
+    appointmentDate,
+    barberName,
+    managementUrl,
+  }: SendGuestBookingConfirmationInput): Promise<void> {
+    const safeFirstName = escapeHtml(firstName);
+    const safeBusinessName = escapeHtml(businessName);
+    const safeAppointmentDate = escapeHtml(appointmentDate);
+    const safeBarberName = escapeHtml(barberName);
+    const safeManagementUrl = escapeHtml(managementUrl);
+
+    await this.transporter.sendMail({
+      from: this.from,
+      to,
+      subject: `${businessName}: tu reserva está confirmada`,
+      text: [
+        `Hola ${firstName},`,
+        '',
+        `Tu reserva en ${businessName} quedó registrada para ${appointmentDate} con ${barberName}.`,
+        '',
+        'Puedes revisar, reprogramar o cancelar tu reserva desde este enlace privado:',
+        managementUrl,
+        '',
+        'No compartas este enlace: permite administrar tu reserva sin iniciar sesión.',
+      ].join('\n'),
+      html: `
+        <!doctype html>
+        <html lang="es">
+          <body style="margin:0;background:#f4f4f5;font-family:Arial,sans-serif;color:#18181b">
+            <div style="padding:32px 16px">
+              <div style="max-width:560px;margin:0 auto;overflow:hidden;border-radius:24px;background:#ffffff;border:1px solid #e4e4e7">
+                <div style="padding:24px 28px;background:#09090b;color:#ffffff">
+                  <strong style="font-size:18px">${safeBusinessName}</strong>
+                  <div style="margin-top:4px;font-size:12px;color:#a1a1aa">Reserva confirmada</div>
+                </div>
+                <div style="padding:32px 28px">
+                  <h1 style="margin:0;font-size:26px;line-height:1.2">Tu hora está reservada</h1>
+                  <p style="margin:18px 0 0;line-height:1.7;color:#52525b">Hola ${safeFirstName}, te esperamos el <strong>${safeAppointmentDate}</strong> con <strong>${safeBarberName}</strong>.</p>
+                  <a href="${safeManagementUrl}" style="display:inline-block;margin-top:24px;padding:14px 22px;border-radius:12px;background:#18181b;color:#ffffff;text-decoration:none;font-weight:700">Gestionar mi reserva</a>
+                  <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#71717a">Este es un enlace privado que permite reprogramar o cancelar sin iniciar sesión. No lo compartas.</p>
+                </div>
+              </div>
+            </div>
+          </body>
+        </html>
+      `,
+    });
+  }
+
+  async sendBookingUpdate({
+    to,
+    firstName,
+    businessName,
+    appointmentDate,
+    barberName,
+    action,
+    managementUrl,
+  }: SendBookingUpdateInput): Promise<void> {
+    const rescheduled = action === 'rescheduled';
+    const cancelled = action === 'cancelled';
+    const subjectAction = rescheduled
+      ? 'reserva reprogramada'
+      : cancelled
+        ? 'reserva cancelada'
+        : 'inasistencia registrada';
+    const title = rescheduled
+      ? 'Reserva reprogramada'
+      : cancelled
+        ? 'Reserva cancelada'
+        : 'No registramos tu llegada';
+    const safeFirstName = escapeHtml(firstName);
+    const safeBusinessName = escapeHtml(businessName);
+    const safeAppointmentDate = escapeHtml(appointmentDate);
+    const safeBarberName = escapeHtml(barberName);
+    const safeManagementUrl = managementUrl
+      ? escapeHtml(managementUrl)
+      : undefined;
+
+    await this.transporter.sendMail({
+      from: this.from,
+      to,
+      subject: `${businessName}: ${subjectAction}`,
+      text: [
+        `Hola ${firstName},`,
+        '',
+        rescheduled
+          ? `Tu reserva en ${businessName} fue reprogramada.`
+          : cancelled
+            ? `Tu reserva en ${businessName} fue cancelada.`
+            : `Tu reserva en ${businessName} fue marcada como inasistencia.`,
+        rescheduled
+          ? `Nueva fecha: ${appointmentDate}, con ${barberName}.`
+          : cancelled
+            ? `La hora del ${appointmentDate}, con ${barberName}, quedó liberada.`
+            : `No registramos tu llegada a la hora del ${appointmentDate}, con ${barberName}. Si crees que se trata de un error, contacta directamente a la barbería.`,
+        ...(managementUrl
+          ? ['', 'Puedes revisar tu reserva aquí:', managementUrl]
+          : []),
+      ].join('\n'),
+      html: `
+        <!doctype html>
+        <html lang="es">
+          <body style="margin:0;background:#f4f4f5;font-family:Arial,sans-serif;color:#18181b">
+            <div style="padding:32px 16px">
+              <div style="max-width:560px;margin:0 auto;overflow:hidden;border-radius:24px;background:#ffffff;border:1px solid #e4e4e7">
+                <div style="padding:24px 28px;background:#09090b;color:#ffffff"><strong style="font-size:18px">${safeBusinessName}</strong></div>
+                <div style="padding:32px 28px">
+                  <h1 style="margin:0;font-size:26px;line-height:1.2">${title}</h1>
+                  <p style="margin:18px 0 0;line-height:1.7;color:#52525b">Hola ${safeFirstName}, ${
+                    rescheduled
+                      ? `tu nueva hora es el <strong>${safeAppointmentDate}</strong> con <strong>${safeBarberName}</strong>.`
+                      : cancelled
+                        ? `la hora del <strong>${safeAppointmentDate}</strong> con <strong>${safeBarberName}</strong> fue cancelada.`
+                        : `no registramos tu llegada a la hora del <strong>${safeAppointmentDate}</strong> con <strong>${safeBarberName}</strong>. Si crees que se trata de un error, contacta directamente a la barbería.`
+                  }</p>
+                  ${
+                    safeManagementUrl
+                      ? `<a href="${safeManagementUrl}" style="display:inline-block;margin-top:24px;padding:14px 22px;border-radius:12px;background:#18181b;color:#ffffff;text-decoration:none;font-weight:700">Ver mi reserva</a>`
+                      : ''
+                  }
                 </div>
               </div>
             </div>

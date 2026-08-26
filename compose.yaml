@@ -82,7 +82,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       DATABASE_URL: ${DATABASE_URL}
-      FRONTEND_URL: http://localhost:5173,http://localhost:3001
+      FRONTEND_URL: http://localhost:3001
       PUBLIC_APP_URL: http://localhost:3001
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
@@ -105,20 +105,42 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ./frontend-next
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "http://localhost:${BACKEND_PORT:-3000}"
 
-    image: agendabarber-frontend:local
+    image: agendabarber-frontend-next:local
 
     container_name: agendabarber-frontend
 
     restart: unless-stopped
 
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      HOSTNAME: 0.0.0.0
+      INTERNAL_API_URL: http://backend:3000
+
     ports:
-      - "5173:80"
+      - "${FRONTEND_PORT:-3001}:3001"
 
     depends_on:
-      - backend
+      backend:
+        condition: service_started
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/').then(response => { if (!response.ok) process.exit(1) }).catch(() => process.exit(1))"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
 
 volumes:

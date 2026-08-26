@@ -1,12 +1,11 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import {
-  createHash,
-  timingSafeEqual,
-} from 'crypto';
+import { ConfigService } from '@nestjs/config';
+import { createHash, timingSafeEqual } from 'crypto';
 
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -14,6 +13,7 @@ import { AvailabilityService } from '../availability/availability.service';
 import { CheckAvailabilityDto } from '../availability/dto/check-availability.dto';
 
 import { AppointmentsService } from '../appointments/appointments.service';
+import { EmailService } from '../email/email.service';
 
 import { CreateGuestAppointmentDto } from './dto/create-guest-appointment.dto';
 import { CancelGuestAppointmentDto } from './dto/cancel-guest-appointment.dto';
@@ -21,10 +21,14 @@ import { RescheduleGuestAppointmentDto } from './dto/reschedule-guest-appointmen
 
 @Injectable()
 export class PublicBookingService {
+  private readonly logger = new Logger(PublicBookingService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly availabilityService: AvailabilityService,
     private readonly appointmentsService: AppointmentsService,
+    private readonly configService: ConfigService,
+    private readonly emailService: EmailService,
   ) {}
 
   /*
@@ -33,13 +37,8 @@ export class PublicBookingService {
    * ============================================================
    */
 
-  async findBusiness(
-    slug: string,
-  ) {
-    const business =
-      await this.findPublicBusinessBySlug(
-        slug,
-      );
+  async findBusiness(slug: string) {
+    const business = await this.findPublicBusinessBySlug(slug);
 
     return {
       slug: business.slug,
@@ -48,6 +47,15 @@ export class PublicBookingService {
       email: business.email,
       address: business.address,
       logoUrl: business.logoUrl,
+      timezone: business.timezone,
+      currency: business.currency,
+      bookingPolicy: {
+        allowCancellation: business.allowClientCancellation,
+        allowRescheduling: business.allowClientRescheduling,
+        cancellationMinimumMinutes: business.cancellationMinimumMinutes,
+        rescheduleMinimumMinutes: business.rescheduleMinimumMinutes,
+        policyText: business.cancellationPolicy,
+      },
     };
   }
 
@@ -57,13 +65,8 @@ export class PublicBookingService {
    * ============================================================
    */
 
-  async findServices(
-    slug: string,
-  ) {
-    const business =
-      await this.findPublicBusinessBySlug(
-        slug,
-      );
+  async findServices(slug: string) {
+    const business = await this.findPublicBusinessBySlug(slug);
 
     return this.prisma.service.findMany({
       where: {
@@ -129,14 +132,8 @@ export class PublicBookingService {
    * ============================================================
    */
 
-  async findBarbers(
-    slug: string,
-    serviceId?: number,
-  ) {
-    const business =
-      await this.findPublicBusinessBySlug(
-        slug,
-      );
+  async findBarbers(slug: string, serviceId?: number) {
+    const business = await this.findPublicBusinessBySlug(slug);
 
     /*
      * Si se especifica un serviceId, primero
@@ -146,30 +143,27 @@ export class PublicBookingService {
      * Esto evita referencias cross-tenant.
      */
     if (serviceId !== undefined) {
-      const service =
-        await this.prisma.service.findFirst({
-          where: {
-            id: serviceId,
+      const service = await this.prisma.service.findFirst({
+        where: {
+          id: serviceId,
+          businessId: business.id,
+          isActive: true,
+          deletedAt: null,
+
+          category: {
             businessId: business.id,
             isActive: true,
             deletedAt: null,
-
-            category: {
-              businessId: business.id,
-              isActive: true,
-              deletedAt: null,
-            },
           },
+        },
 
-          select: {
-            id: true,
-          },
-        });
+        select: {
+          id: true,
+        },
+      });
 
       if (!service) {
-        throw new NotFoundException(
-          'Servicio no encontrado.',
-        );
+        throw new NotFoundException('Servicio no encontrado.');
       }
     }
 
@@ -267,14 +261,8 @@ export class PublicBookingService {
    * ============================================================
    */
 
-  async findAvailability(
-    slug: string,
-    dto: CheckAvailabilityDto,
-  ) {
-    const business =
-      await this.findPublicBusinessBySlug(
-        slug,
-      );
+  async findAvailability(slug: string, dto: CheckAvailabilityDto) {
+    const business = await this.findPublicBusinessBySlug(slug);
 
     /*
      * No duplicamos el motor de disponibilidad.
@@ -293,134 +281,209 @@ export class PublicBookingService {
      * - reservas existentes
      * - timezone
      */
-    return this.availabilityService.check(
-      business.id,
-      dto,
-    );
+    return this.availabilityService.check(business.id, dto);
   }
 
   async findGuestAppointment(
-  slug: string,
-  confirmationCode: string,
-  managementToken?: string,
-) {
-  const access =
-    await this.authorizeGuestAppointmentAccess(
-      slug,
-      confirmationCode,
-      managementToken,
-    );
-
-  return this.findPublicGuestAppointmentById(
-    access.businessId,
-    access.appointmentId,
-  );
-}
-
-async rescheduleGuestAppointment(
-  slug: string,
-  confirmationCode: string,
-  managementToken: string | undefined,
-  dto: RescheduleGuestAppointmentDto,
-) {
-  const access =
-    await this.authorizeGuestAppointmentAccess(
-      slug,
-      confirmationCode,
-      managementToken,
-    );
-
-  await this.appointmentsService.rescheduleForGuest(
-    access.businessId,
-    access.appointmentId,
-    dto.startAt,
-  );
-
-  /*
-   * La respuesta sigue pasando por la misma allowlist
-   * pública utilizada por GET y cancelación.
-   */
-  return this.findPublicGuestAppointmentById(
-    access.businessId,
-    access.appointmentId,
-  );
-}
-
-async cancelGuestAppointment(
-  slug: string,
-  confirmationCode: string,
-  managementToken: string | undefined,
-  dto: CancelGuestAppointmentDto,
-) {
-  const access =
-    await this.authorizeGuestAppointmentAccess(
-      slug,
-      confirmationCode,
-      managementToken,
-    );
-
-  await this.appointmentsService.cancelForGuest(
-    access.businessId,
-    access.appointmentId,
-    dto.reason,
-  );
-
-  /*
-   * No devolvemos la entidad rica del módulo privado.
-   * Reutilizamos la misma allowlist pública usada por GET.
-   */
-  return this.findPublicGuestAppointmentById(
-    access.businessId,
-    access.appointmentId,
-  );
-}
-
-private async authorizeGuestAppointmentAccess(
-  slug: string,
-  confirmationCode: string,
-  managementToken?: string,
-): Promise<{
-  businessId: number;
-  appointmentId: number;
-}> {
-  const business =
-    await this.findPublicBusinessBySlug(
-      slug,
-    );
-
-  const normalizedCode =
-    confirmationCode
-      .trim()
-      .toUpperCase();
-
-  /*
-   * confirmationCode es un identificador visible;
-   * nunca funciona como secreto por sí solo.
-   */
-  if (
-    !/^[A-F0-9]{10}$/.test(
-      normalizedCode,
-    ) ||
-    !managementToken ||
-    managementToken.length > 200
+    slug: string,
+    confirmationCode: string,
+    managementToken?: string,
   ) {
-    throw new UnauthorizedException(
-      'No fue posible acceder a la reserva.',
+    const access = await this.authorizeGuestAppointmentAccess(
+      slug,
+      confirmationCode,
+      managementToken,
+    );
+
+    return this.findPublicGuestAppointmentById(
+      access.businessId,
+      access.appointmentId,
     );
   }
 
-  /*
-   * Calculamos el hash del token recibido incluso antes de
-   * saber si existe la reserva. Esto nos permite mantener una
-   * comparación de tamaño fijo más abajo.
-   */
-  const suppliedHash =
-    this.hashManagementToken(
+  async rescheduleGuestAppointment(
+    slug: string,
+    confirmationCode: string,
+    managementToken: string | undefined,
+    dto: RescheduleGuestAppointmentDto,
+  ) {
+    const access = await this.authorizeGuestAppointmentAccess(
+      slug,
+      confirmationCode,
       managementToken,
     );
 
-  const protectedAppointment =
-    await this.prisma.appointment.findFirst({
+    await this.appointmentsService.rescheduleForGuest(
+      access.businessId,
+      access.appointmentId,
+      dto.startAt,
+    );
+
+    /*
+     * La respuesta sigue pasando por la misma allowlist
+     * pública utilizada por GET y cancelación.
+     */
+    const updatedAppointment = await this.findPublicGuestAppointmentById(
+      access.businessId,
+      access.appointmentId,
+    );
+
+    this.notifyGuestBookingUpdate(
+      access.businessId,
+      access.appointmentId,
+      slug,
+      confirmationCode,
+      managementToken,
+      updatedAppointment,
+      'rescheduled',
+    );
+
+    return updatedAppointment;
+  }
+
+  async cancelGuestAppointment(
+    slug: string,
+    confirmationCode: string,
+    managementToken: string | undefined,
+    dto: CancelGuestAppointmentDto,
+  ) {
+    const access = await this.authorizeGuestAppointmentAccess(
+      slug,
+      confirmationCode,
+      managementToken,
+    );
+
+    await this.appointmentsService.cancelForGuest(
+      access.businessId,
+      access.appointmentId,
+      dto.reason,
+    );
+
+    /*
+     * No devolvemos la entidad rica del módulo privado.
+     * Reutilizamos la misma allowlist pública usada por GET.
+     */
+    const updatedAppointment = await this.findPublicGuestAppointmentById(
+      access.businessId,
+      access.appointmentId,
+    );
+
+    this.notifyGuestBookingUpdate(
+      access.businessId,
+      access.appointmentId,
+      slug,
+      confirmationCode,
+      managementToken,
+      updatedAppointment,
+      'cancelled',
+    );
+
+    return updatedAppointment;
+  }
+
+  private notifyGuestBookingUpdate(
+    businessId: number,
+    appointmentId: number,
+    slug: string,
+    confirmationCode: string,
+    managementToken: string | undefined,
+    appointment: {
+      startAt: Date;
+      business: { name: string; timezone: string };
+      barber: { displayName: string };
+    },
+    action: 'rescheduled' | 'cancelled',
+  ): void {
+    if (!managementToken) {
+      return;
+    }
+
+    void this.prisma.appointment
+      .findFirst({
+        where: {
+          id: appointmentId,
+          businessId,
+          managementTokenHash: { not: null },
+          deletedAt: null,
+        },
+        select: {
+          customer: {
+            select: {
+              firstName: true,
+              email: true,
+            },
+          },
+        },
+      })
+      .then(async (record) => {
+        if (!record?.customer.email) {
+          return;
+        }
+
+        const publicAppUrl = this.configService
+          .getOrThrow<string>('PUBLIC_APP_URL')
+          .replace(/\/$/, '');
+        const managementUrl = `${publicAppUrl}/${encodeURIComponent(
+          slug,
+        )}/booking/manage/${encodeURIComponent(
+          confirmationCode,
+        )}#token=${encodeURIComponent(managementToken)}`;
+        const appointmentDate = new Intl.DateTimeFormat('es-CL', {
+          dateStyle: 'full',
+          timeStyle: 'short',
+          timeZone: appointment.business.timezone,
+        }).format(appointment.startAt);
+
+        await this.emailService.sendBookingUpdate({
+          to: record.customer.email,
+          firstName: record.customer.firstName,
+          businessName: appointment.business.name,
+          appointmentDate,
+          barberName: appointment.barber.displayName,
+          action,
+          managementUrl,
+        });
+      })
+      .catch((error: unknown) => {
+        this.logger.error(
+          `No fue posible notificar el cambio de la reserva ${appointmentId}.`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      });
+  }
+
+  private async authorizeGuestAppointmentAccess(
+    slug: string,
+    confirmationCode: string,
+    managementToken?: string,
+  ): Promise<{
+    businessId: number;
+    appointmentId: number;
+  }> {
+    const business = await this.findPublicBusinessBySlug(slug);
+
+    const normalizedCode = confirmationCode.trim().toUpperCase();
+
+    /*
+     * confirmationCode es un identificador visible;
+     * nunca funciona como secreto por sí solo.
+     */
+    if (
+      !/^[A-F0-9]{10}$/.test(normalizedCode) ||
+      !managementToken ||
+      managementToken.length > 200
+    ) {
+      throw new UnauthorizedException('No fue posible acceder a la reserva.');
+    }
+
+    /*
+     * Calculamos el hash del token recibido incluso antes de
+     * saber si existe la reserva. Esto nos permite mantener una
+     * comparación de tamaño fijo más abajo.
+     */
+    const suppliedHash = this.hashManagementToken(managementToken);
+
+    const protectedAppointment = await this.prisma.appointment.findFirst({
       where: {
         businessId: business.id,
         confirmationCode: normalizedCode,
@@ -433,65 +496,40 @@ private async authorizeGuestAppointmentAccess(
       },
     });
 
-  const storedHash =
-    protectedAppointment
-      ?.managementTokenHash;
+    const storedHash = protectedAppointment?.managementTokenHash;
 
-  /*
-   * Si la reserva no existe o el hash almacenado no tiene el
-   * formato esperado, usamos un hash ficticio de 32 bytes.
-   * De esta forma timingSafeEqual sigue ejecutándose con dos
-   * buffers del mismo tamaño.
-   */
-  const safeStoredHash =
-    storedHash &&
-    /^[a-f0-9]{64}$/i.test(
-      storedHash,
-    )
-      ? storedHash
-      : '0'.repeat(64);
+    /*
+     * Si la reserva no existe o el hash almacenado no tiene el
+     * formato esperado, usamos un hash ficticio de 32 bytes.
+     * De esta forma timingSafeEqual sigue ejecutándose con dos
+     * buffers del mismo tamaño.
+     */
+    const safeStoredHash =
+      storedHash && /^[a-f0-9]{64}$/i.test(storedHash)
+        ? storedHash
+        : '0'.repeat(64);
 
-  const suppliedBuffer =
-    Buffer.from(
-      suppliedHash,
-      'hex',
-    );
+    const suppliedBuffer = Buffer.from(suppliedHash, 'hex');
 
-  const storedBuffer =
-    Buffer.from(
-      safeStoredHash,
-      'hex',
-    );
+    const storedBuffer = Buffer.from(safeStoredHash, 'hex');
 
-  const tokenIsValid =
-    timingSafeEqual(
-      suppliedBuffer,
-      storedBuffer,
-    );
+    const tokenIsValid = timingSafeEqual(suppliedBuffer, storedBuffer);
 
-  if (
-    !protectedAppointment ||
-    !storedHash ||
-    !tokenIsValid
-  ) {
-    throw new UnauthorizedException(
-      'No fue posible acceder a la reserva.',
-    );
+    if (!protectedAppointment || !storedHash || !tokenIsValid) {
+      throw new UnauthorizedException('No fue posible acceder a la reserva.');
+    }
+
+    return {
+      businessId: business.id,
+      appointmentId: protectedAppointment.id,
+    };
   }
 
-  return {
-    businessId: business.id,
-    appointmentId:
-      protectedAppointment.id,
-  };
-}
-
-private async findPublicGuestAppointmentById(
-  businessId: number,
-  appointmentId: number,
-) {
-  const appointment =
-    await this.prisma.appointment.findFirst({
+  private async findPublicGuestAppointmentById(
+    businessId: number,
+    appointmentId: number,
+  ) {
+    const appointment = await this.prisma.appointment.findFirst({
       where: {
         id: appointmentId,
         businessId,
@@ -514,6 +552,19 @@ private async findPublicGuestAppointmentById(
         totalPrice: true,
         customerNotes: true,
         confirmationCode: true,
+
+        business: {
+          select: {
+            name: true,
+            timezone: true,
+            currency: true,
+            allowClientCancellation: true,
+            allowClientRescheduling: true,
+            cancellationMinimumMinutes: true,
+            rescheduleMinimumMinutes: true,
+            cancellationPolicy: true,
+          },
+        },
 
         barber: {
           select: {
@@ -538,47 +589,47 @@ private async findPublicGuestAppointmentById(
       },
     });
 
-  if (!appointment) {
-    throw new UnauthorizedException(
-      'No fue posible acceder a la reserva.',
-    );
-  }
+    if (!appointment) {
+      throw new UnauthorizedException('No fue posible acceder a la reserva.');
+    }
 
-  return {
-    id: appointment.id,
-    status: appointment.status,
-    startAt: appointment.startAt,
-    endAt: appointment.endAt,
-    totalDurationMinutes:
-      appointment.totalDurationMinutes,
-    totalPrice: appointment.totalPrice,
-    customerNotes: appointment.customerNotes,
-    confirmationCode:
-      appointment.confirmationCode,
-    barber: appointment.barber,
+    return {
+      id: appointment.id,
+      status: appointment.status,
+      startAt: appointment.startAt,
+      endAt: appointment.endAt,
+      totalDurationMinutes: appointment.totalDurationMinutes,
+      totalPrice: appointment.totalPrice,
+      customerNotes: appointment.customerNotes,
+      confirmationCode: appointment.confirmationCode,
+      business: {
+        name: appointment.business.name,
+        timezone: appointment.business.timezone,
+        currency: appointment.business.currency,
+        bookingPolicy: {
+          allowCancellation: appointment.business.allowClientCancellation,
+          allowRescheduling: appointment.business.allowClientRescheduling,
+          cancellationMinimumMinutes:
+            appointment.business.cancellationMinimumMinutes,
+          rescheduleMinimumMinutes:
+            appointment.business.rescheduleMinimumMinutes,
+          policyText: appointment.business.cancellationPolicy,
+        },
+      },
+      barber: appointment.barber,
 
-    services: appointment.services.map(
-      (service) => ({
+      services: appointment.services.map((service) => ({
         id: service.serviceId,
         name: service.serviceName,
-        durationMinutes:
-          service.durationMinutes,
+        durationMinutes: service.durationMinutes,
         price: service.finalPrice,
-      }),
-    ),
-  };
-}
+      })),
+    };
+  }
 
-private hashManagementToken(
-  token: string,
-): string {
-  return createHash('sha256')
-    .update(
-      token,
-      'utf8',
-    )
-    .digest('hex');
-}
+  private hashManagementToken(token: string): string {
+    return createHash('sha256').update(token, 'utf8').digest('hex');
+  }
 
   /*
    * ============================================================
@@ -586,18 +637,12 @@ private hashManagementToken(
    * ============================================================
    */
 
-  async createGuestAppointment(
-    slug: string,
-    dto: CreateGuestAppointmentDto,
-  ) {
+  async createGuestAppointment(slug: string, dto: CreateGuestAppointmentDto) {
     /*
      * El frontend nunca decide businessId.
      * Se resuelve exclusivamente mediante el slug público.
      */
-    const business =
-      await this.findPublicBusinessBySlug(
-        slug,
-      );
+    const business = await this.findPublicBusinessBySlug(slug);
 
     /*
      * La identidad guest y la reserva se resuelven dentro
@@ -608,49 +653,72 @@ private hashManagementToken(
      * resuelve el tenant por slug, adapta la entrada y
      * sanitiza la respuesta.
      */
-    const appointment =
-      await this.appointmentsService.createForGuest(
-        business.id,
-        {
-          firstName:
-            dto.firstName,
+    const appointment = await this.appointmentsService.createForGuest(
+      business.id,
+      {
+        firstName: dto.firstName,
 
-          lastName:
-            dto.lastName,
+        lastName: dto.lastName,
 
-          phone:
-            dto.phone,
+        phone: dto.phone,
 
-          ...(dto.email !== undefined && {
-            email:
-              dto.email,
-          }),
-        },
-        {
-          barberId:
-            dto.barberId,
+        ...(dto.email !== undefined && {
+          email: dto.email,
+        }),
+      },
+      {
+        barberId: dto.barberId,
 
-          serviceIds:
-            dto.serviceIds,
+        serviceIds: dto.serviceIds,
 
-          startAt:
-            dto.startAt,
+        startAt: dto.startAt,
 
-          ...(dto.customerNotes !== undefined && {
-            customerNotes:
-              dto.customerNotes,
-          }),
-        },
-      );
+        ...(dto.customerNotes !== undefined && {
+          customerNotes: dto.customerNotes,
+        }),
+      },
+    );
+
+    if (dto.email) {
+      const publicAppUrl = this.configService
+        .getOrThrow<string>('PUBLIC_APP_URL')
+        .replace(/\/$/, '');
+
+      const managementUrl = `${publicAppUrl}/${encodeURIComponent(
+        business.slug,
+      )}/booking/manage/${encodeURIComponent(
+        appointment.confirmationCode,
+      )}#token=${encodeURIComponent(appointment.managementToken)}`;
+
+      const appointmentDate = new Intl.DateTimeFormat('es-CL', {
+        dateStyle: 'full',
+        timeStyle: 'short',
+        timeZone: business.timezone,
+      }).format(appointment.startAt);
+
+      try {
+        await this.emailService.sendGuestBookingConfirmation({
+          to: dto.email.trim().toLowerCase(),
+          firstName: dto.firstName.trim(),
+          businessName: business.name,
+          appointmentDate,
+          barberName: appointment.barber.displayName,
+          managementUrl,
+        });
+      } catch (error) {
+        this.logger.error(
+          `No fue posible enviar la confirmación de la reserva ${appointment.id}.`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      }
+    }
 
     /*
      * Nunca devolvemos directamente la entidad rica
      * que usa la API privada. La salida pública se
      * construye mediante una allowlist explícita.
      */
-    return this.toPublicAppointmentResponse(
-      appointment,
-    );
+    return this.toPublicAppointmentResponse(appointment, business);
   }
 
   /*
@@ -661,12 +729,18 @@ private hashManagementToken(
 
   private toPublicAppointmentResponse(
     appointment: NonNullable<
-      Awaited<
-        ReturnType<
-          AppointmentsService['createForGuest']
-        >
-      >
+      Awaited<ReturnType<AppointmentsService['createForGuest']>>
     >,
+    business: {
+      name: string;
+      timezone: string;
+      currency: string;
+      allowClientCancellation: boolean;
+      allowClientRescheduling: boolean;
+      cancellationMinimumMinutes: number;
+      rescheduleMinimumMinutes: number;
+      cancellationPolicy: string | null;
+    },
   ) {
     /*
      * Allowlist explícita.
@@ -675,23 +749,17 @@ private hashManagementToken(
      * nuevos, ninguno aparecerá automáticamente aquí.
      */
     return {
-      id:
-        appointment.id,
+      id: appointment.id,
 
-      status:
-        appointment.status,
+      status: appointment.status,
 
-      startAt:
-        appointment.startAt,
+      startAt: appointment.startAt,
 
-      endAt:
-        appointment.endAt,
+      endAt: appointment.endAt,
 
-      totalDurationMinutes:
-        appointment.totalDurationMinutes,
+      totalDurationMinutes: appointment.totalDurationMinutes,
 
-      totalPrice:
-        appointment.totalPrice,
+      totalPrice: appointment.totalPrice,
 
       /*
        * Este código puede mostrarse como identificador
@@ -701,8 +769,7 @@ private hashManagementToken(
        * secreto para cancelar o modificar una reserva
        * guest.
        */
-      confirmationCode:
-        appointment.confirmationCode,
+      confirmationCode: appointment.confirmationCode,
 
       /*
        * Token secreto de gestión.
@@ -710,36 +777,38 @@ private hashManagementToken(
        * para que el cliente pueda administrar su reserva.
        * El backend guarda solo su hash.
        */
-      managementToken:
-        appointment.managementToken,
+      managementToken: appointment.managementToken,
 
-      barber: {
-        id:
-          appointment.barber.id,
-
-        displayName:
-          appointment.barber.displayName,
-
-        photoUrl:
-          appointment.barber.photoUrl,
+      business: {
+        name: business.name,
+        timezone: business.timezone,
+        currency: business.currency,
+        bookingPolicy: {
+          allowCancellation: business.allowClientCancellation,
+          allowRescheduling: business.allowClientRescheduling,
+          cancellationMinimumMinutes: business.cancellationMinimumMinutes,
+          rescheduleMinimumMinutes: business.rescheduleMinimumMinutes,
+          policyText: business.cancellationPolicy,
+        },
       },
 
-      services:
-        appointment.services.map(
-          (appointmentService) => ({
-            id:
-              appointmentService.serviceId,
+      barber: {
+        id: appointment.barber.id,
 
-            name:
-              appointmentService.serviceName,
+        displayName: appointment.barber.displayName,
 
-            durationMinutes:
-              appointmentService.durationMinutes,
+        photoUrl: appointment.barber.photoUrl,
+      },
 
-            price:
-              appointmentService.finalPrice,
-          }),
-        ),
+      services: appointment.services.map((appointmentService) => ({
+        id: appointmentService.serviceId,
+
+        name: appointmentService.serviceName,
+
+        durationMinutes: appointmentService.durationMinutes,
+
+        price: appointmentService.finalPrice,
+      })),
     };
   }
 
@@ -749,13 +818,8 @@ private hashManagementToken(
    * ============================================================
    */
 
-  private async findPublicBusinessBySlug(
-    slug: string,
-  ) {
-    const normalizedSlug =
-      slug
-        .trim()
-        .toLowerCase();
+  private async findPublicBusinessBySlug(slug: string) {
+    const normalizedSlug = slug.trim().toLowerCase();
 
     /*
      * El slug es público, pero businessId nunca
@@ -764,43 +828,42 @@ private hashManagementToken(
      * Solo pueden operar negocios activos y no
      * eliminados.
      */
-    const business =
-      await this.prisma.business.findFirst({
-        where: {
-          slug:
-            normalizedSlug,
+    const business = await this.prisma.business.findFirst({
+      where: {
+        slug: normalizedSlug,
 
-          isActive:
-            true,
+        isActive: true,
 
-          deletedAt:
-            null,
-        },
+        deletedAt: null,
+      },
 
-        /*
-         * Incluso internamente solicitamos solamente
-         * los campos que este módulo necesita.
-         */
-        select: {
-          id: true,
-          slug: true,
-          name: true,
-          phone: true,
-          email: true,
-          address: true,
-          logoUrl: true,
-          timezone: true,
-          currency: true,
-          appointmentInterval: true,
-          minimumAdvanceTime: true,
-          maximumAdvanceDays: true,
-        },
-      });
+      /*
+       * Incluso internamente solicitamos solamente
+       * los campos que este módulo necesita.
+       */
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+        phone: true,
+        email: true,
+        address: true,
+        logoUrl: true,
+        timezone: true,
+        currency: true,
+        appointmentInterval: true,
+        minimumAdvanceTime: true,
+        maximumAdvanceDays: true,
+        cancellationMinimumMinutes: true,
+        rescheduleMinimumMinutes: true,
+        allowClientCancellation: true,
+        allowClientRescheduling: true,
+        cancellationPolicy: true,
+      },
+    });
 
     if (!business) {
-      throw new NotFoundException(
-        'Barbería no encontrada.',
-      );
+      throw new NotFoundException('Barbería no encontrada.');
     }
 
     return business;

@@ -234,12 +234,23 @@ export default function LoginForm() {
       </div>
 
       <div>
-        <label
-          htmlFor="password"
-          className="mb-1 block text-sm font-medium text-zinc-700"
-        >
-          Contraseña
-        </label>
+        <div className="mb-1 flex items-center justify-between gap-3">
+          <label
+            htmlFor="password"
+            className="text-sm font-medium text-zinc-700"
+          >
+            Contraseña
+          </label>
+
+          {businessSlug && (
+            <Link
+              href={`/${businessSlug}/forgot-password`}
+              className="text-xs font-semibold text-zinc-500 underline-offset-4 hover:text-zinc-950 hover:underline"
+            >
+              ¿La olvidaste?
+            </Link>
+          )}
+        </div>
 
         <input
           id="password"

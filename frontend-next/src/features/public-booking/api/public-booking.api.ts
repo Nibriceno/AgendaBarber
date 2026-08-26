@@ -5,19 +5,28 @@ import type {
   PublicService,
 } from "../types/public-booking.types";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL;
+const PUBLIC_API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+function getApiBaseUrl(): string | undefined {
+  if (typeof window === "undefined" && process.env.INTERNAL_API_URL) {
+    return process.env.INTERNAL_API_URL;
+  }
+
+  return PUBLIC_API_URL;
+}
 
 function getApiUrl(
   path: string,
 ): string {
-  if (!API_URL) {
+  const apiUrl = getApiBaseUrl();
+
+  if (!apiUrl) {
     throw new Error(
-      "NEXT_PUBLIC_API_URL no está configurado.",
+      "La URL de la API no está configurada.",
     );
   }
 
-  return `${API_URL}${path}`;
+  return `${apiUrl}${path}`;
 }
 
 async function getPublicResource<T>(

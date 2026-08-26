@@ -70,4 +70,10 @@ export const APP_NAVIGATION:
         "RECEPTIONIST",
       ],
     },
+
+    {
+      label: "Políticas de reserva",
+      segment: "booking-settings",
+      roles: ["ADMIN"],
+    },
   ];

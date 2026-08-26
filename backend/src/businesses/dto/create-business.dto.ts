@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
@@ -5,6 +6,8 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 
@@ -55,6 +58,38 @@ export class CreateBusinessDto {
   @IsInt()
   @Min(1)
   maximumAdvanceDays?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(20_160)
+  cancellationMinimumMinutes?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(20_160)
+  rescheduleMinimumMinutes?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  allowClientCancellation?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  allowClientRescheduling?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(180)
+  noShowGraceMinutes?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MaxLength(1000)
+  cancellationPolicy?: string;
 
   @IsOptional()
   @IsBoolean()

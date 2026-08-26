@@ -10,8 +10,13 @@ import {
 } from "next/navigation";
 
 import {
+  createClientBooking,
   createGuestBooking,
 } from "../api/create-booking.api";
+
+import {
+  useAuth,
+} from "@/features/auth/context/AuthContext";
 
 import {
   bookingConfirmationStorage,
@@ -19,6 +24,7 @@ import {
 
 import type {
   PublicBarber,
+  PublicBusiness,
   PublicService,
 } from "../types/public-booking.types";
 
@@ -32,6 +38,7 @@ type BookingDetailsFormProps = {
   services: PublicService[];
 
   startAt: string;
+  business: PublicBusiness;
 };
 
 type FormState = {
@@ -125,9 +132,23 @@ export default function BookingDetailsForm({
   barber,
   services,
   startAt,
+  business,
 }: BookingDetailsFormProps) {
   const router =
     useRouter();
+
+  const {
+    user,
+    loading: authLoading,
+  } = useAuth();
+
+  const isAuthenticatedClient =
+    user?.role === "CLIENT" &&
+    user.businessSlug === businessSlug;
+
+  const clientFromAnotherBusiness =
+    user?.role === "CLIENT" &&
+    user.businessSlug !== businessSlug;
 
   const [form, setForm] =
     useState<FormState>(
@@ -223,10 +244,23 @@ export default function BookingDetailsForm({
         return;
       }
 
-      const validationError =
-        validateForm(
-          form,
+      if (authLoading) {
+        return;
+      }
+
+      if (clientFromAnotherBusiness) {
+        setError(
+          "Tu sesión pertenece a otra barbería. Cierra sesión para reservar como invitado.",
         );
+        return;
+      }
+
+      const validationError =
+        isAuthenticatedClient
+          ? null
+          : validateForm(
+              form,
+            );
 
       if (
         validationError
@@ -245,10 +279,27 @@ export default function BookingDetailsForm({
       setError(null);
 
       try {
-        const booking =
-          await createGuestBooking(
-            businessSlug,
-            {
+        const booking = isAuthenticatedClient
+          ? await createClientBooking({
+              barberId:
+                barber.id,
+
+              serviceIds:
+                services.map(
+                  (service) =>
+                    service.id,
+                ),
+
+              startAt,
+
+              ...(form.customerNotes.trim() && {
+                customerNotes:
+                  form.customerNotes.trim(),
+              }),
+            })
+          : await createGuestBooking(
+              businessSlug,
+              {
               firstName:
                 form.firstName.trim(),
 
@@ -285,8 +336,8 @@ export default function BookingDetailsForm({
                 customerNotes:
                   form.customerNotes.trim(),
               }),
-            },
-          );
+              },
+            );
 
         bookingConfirmationStorage.save(
           booking,
@@ -344,9 +395,11 @@ export default function BookingDetailsForm({
             </h1>
 
             <p className="mt-2 text-sm leading-6 text-zinc-500">
-              Solo necesitamos
-              algunos datos para
-              identificar tu hora.
+              {authLoading
+                ? "Comprobando tu sesión..."
+                : isAuthenticatedClient
+                  ? "Usaremos los datos guardados en tu cuenta."
+                  : "Solo necesitamos algunos datos para identificar tu hora."}
             </p>
           </section>
 
@@ -385,12 +438,64 @@ export default function BookingDetailsForm({
             </div>
           </section>
 
+          <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 sm:p-5">
+            <p className="text-sm font-semibold text-zinc-950">
+              Política de cambios y cancelaciones
+            </p>
+            <div className="mt-2 space-y-1 text-sm leading-6 text-zinc-600">
+              <p>
+                {business.bookingPolicy.allowRescheduling
+                  ? `Puedes reprogramar con al menos ${business.bookingPolicy.rescheduleMinimumMinutes} minutos de anticipación.`
+                  : "La reprogramación en línea está desactivada."}
+              </p>
+              <p>
+                {business.bookingPolicy.allowCancellation
+                  ? `Puedes cancelar con al menos ${business.bookingPolicy.cancellationMinimumMinutes} minutos de anticipación.`
+                  : "La cancelación en línea está desactivada."}
+              </p>
+            </div>
+            {business.bookingPolicy.policyText && (
+              <p className="mt-3 border-t border-amber-200 pt-3 text-sm leading-6 text-zinc-600">
+                {business.bookingPolicy.policyText}
+              </p>
+            )}
+          </section>
+
           <form
             onSubmit={
               handleSubmit
             }
             className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6"
           >
+            {authLoading ? (
+              <div className="space-y-3" aria-live="polite">
+                <div className="h-20 animate-pulse rounded-2xl bg-zinc-100" />
+                <p className="text-center text-sm text-zinc-500">
+                  Comprobando tu sesión...
+                </p>
+              </div>
+            ) : isAuthenticatedClient ? (
+              <section className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 sm:p-5">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-sm font-bold text-white">
+                    {user.firstName.charAt(0).toUpperCase()}
+                    {user.lastName.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-zinc-950">
+                      Reservando como {user.firstName} {user.lastName}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-zinc-600">
+                      {user.email ?? user.phone}
+                    </p>
+                    <p className="mt-2 text-xs leading-5 text-emerald-800">
+                      Esta cita aparecerá automáticamente en “Mis reservas”.
+                    </p>
+                  </div>
+                </div>
+              </section>
+            ) : (
+              <>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block">
                 <span className="mb-2 block text-sm font-medium text-zinc-800">
@@ -504,10 +609,19 @@ export default function BookingDetailsForm({
                 />
 
                 <p className="mt-2 text-xs text-zinc-400">
-                  Opcional
+                  Recomendado: recibirás un enlace privado para gestionar tu reserva sin crear una cuenta.
                 </p>
               </label>
             </div>
+
+              </>
+            )}
+
+            {clientFromAnotherBusiness && (
+              <p role="alert" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
+                Tu sesión pertenece a otra barbería. Cierra sesión para reservar aquí como invitado.
+              </p>
+            )}
 
             <div className="mt-4">
               <label className="block">
@@ -551,7 +665,9 @@ export default function BookingDetailsForm({
             <button
               type="submit"
               disabled={
-                submitting
+                submitting ||
+                authLoading ||
+                clientFromAnotherBusiness
               }
               className="mt-6 flex h-13 min-h-[52px] w-full items-center justify-center rounded-xl bg-zinc-950 px-5 text-base font-semibold text-white transition hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-400 disabled:cursor-not-allowed disabled:bg-zinc-300"
             >

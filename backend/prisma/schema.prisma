@@ -48,8 +48,11 @@ model Business {
   minimumAdvanceTime  Int @default(60)
   maximumAdvanceDays  Int @default(60)
 
-  cancellationMinimumMinutes Int @default(120)
-  rescheduleMinimumMinutes   Int @default(120)
+  cancellationMinimumMinutes Int     @default(120)
+  rescheduleMinimumMinutes   Int     @default(120)
+  allowClientCancellation    Boolean @default(true)
+  allowClientRescheduling    Boolean @default(true)
+  cancellationPolicy         String? @db.VarChar(1000)
 
   barberStartEarlyMinutes Int @default(15)
   noShowGraceMinutes      Int @default(15)
@@ -92,6 +95,12 @@ model User {
   emailVerificationTokenHash String?   @unique @db.VarChar(64)
   emailVerificationExpiresAt DateTime?
   emailVerificationSentAt    DateTime?
+
+  passwordResetTokenHash String?   @unique @db.VarChar(64)
+  passwordResetExpiresAt DateTime?
+  passwordResetSentAt    DateTime?
+
+  authVersion Int @default(0)
 
   barber Barber?
 

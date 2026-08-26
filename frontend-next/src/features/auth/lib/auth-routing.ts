@@ -112,7 +112,8 @@ export function canAccessProtectedRoute(
    */
   if (
     matches("/services") ||
-    matches("/categories")
+    matches("/categories") ||
+    matches("/booking-settings")
   ) {
     return role === "ADMIN";
   }

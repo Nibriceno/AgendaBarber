@@ -108,6 +108,9 @@ export class UsersService {
       },
       data: {
         passwordHash,
+        authVersion: {
+          increment: 1,
+        },
       },
       select: {
         id: true,
@@ -829,6 +832,10 @@ export class UsersService {
 
       data: {
         passwordHash,
+
+        authVersion: {
+          increment: 1,
+        },
 
         isRegistered: true,
       },

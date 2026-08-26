@@ -88,19 +88,22 @@ export default function BookingConfirmationView({
     useState(false);
 
   useEffect(() => {
-    const stored =
-      bookingConfirmationStorage.get();
+    void Promise.resolve().then(() => {
+      const stored =
+        bookingConfirmationStorage.get();
 
-    if (
-      stored?.confirmationCode ===
-      confirmationCode
-    ) {
-      setBooking(
-        stored,
-      );
-    }
+      if (
+        stored?.confirmationCode ===
+          confirmationCode &&
+        stored.business
+      ) {
+        setBooking(
+          stored,
+        );
+      }
 
-    setLoaded(true);
+      setLoaded(true);
+    });
   }, [
     confirmationCode,
   ]);
@@ -141,6 +144,12 @@ export default function BookingConfirmationView({
       </div>
     );
   }
+
+  const managementHref = booking.managementToken
+    ? `/${businessSlug}/booking/manage/${encodeURIComponent(
+        booking.confirmationCode,
+      )}#token=${encodeURIComponent(booking.managementToken)}`
+    : `/${businessSlug}/account/bookings`;
 
   return (
     <div className="min-h-screen bg-zinc-50">
@@ -254,12 +263,39 @@ export default function BookingConfirmationView({
           </p>
         </section>
 
-        <Link
-          href={`/${businessSlug}`}
-          className="mt-6 flex h-12 w-full items-center justify-center rounded-xl bg-zinc-950 px-6 text-sm font-semibold text-white transition hover:bg-zinc-800"
-        >
-          Volver al inicio
-        </Link>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <Link
+            href={managementHref}
+            className="flex h-12 items-center justify-center rounded-xl bg-zinc-950 px-6 text-sm font-semibold text-white transition hover:bg-zinc-800"
+          >
+            Gestionar mi reserva
+          </Link>
+          <Link
+            href={`/${businessSlug}`}
+            className="flex h-12 items-center justify-center rounded-xl border border-zinc-300 bg-white px-6 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-100"
+          >
+            Volver al inicio
+          </Link>
+        </div>
+
+        <section className="mt-4 rounded-2xl border border-zinc-200 bg-white p-5">
+          <p className="text-sm font-semibold text-zinc-950">
+            Cambios y cancelaciones
+          </p>
+          <p className="mt-2 text-sm leading-6 text-zinc-500">
+            {booking.business.bookingPolicy.allowRescheduling
+              ? `Puedes reprogramar hasta ${booking.business.bookingPolicy.rescheduleMinimumMinutes} minutos antes. `
+              : "La reprogramación en línea está desactivada. "}
+            {booking.business.bookingPolicy.allowCancellation
+              ? `Puedes cancelar hasta ${booking.business.bookingPolicy.cancellationMinimumMinutes} minutos antes.`
+              : "La cancelación en línea está desactivada."}
+          </p>
+          {booking.business.bookingPolicy.policyText && (
+            <p className="mt-3 border-t border-zinc-100 pt-3 text-sm leading-6 text-zinc-600">
+              {booking.business.bookingPolicy.policyText}
+            </p>
+          )}
+        </section>
       </main>
     </div>
   );
