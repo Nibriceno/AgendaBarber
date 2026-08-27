@@ -1,72 +1,27 @@
-const ACCESS_TOKEN_KEY =
-  "accessToken";
+export const AUTH_UNAUTHORIZED_EVENT = "auth:unauthorized";
 
-const USER_KEY =
-  "user";
+let csrfToken: string | null = null;
 
-export const
-  AUTH_UNAUTHORIZED_EVENT =
-    "auth:unauthorized";
+function removeLegacyCredentials() {
+  if (typeof window === "undefined") return;
 
-function isBrowser() {
-  return (
-    typeof window !==
-    "undefined"
-  );
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("user");
 }
 
-export const authStorage = {
-  getToken():
-    | string
-    | null {
-    if (!isBrowser()) {
-      return null;
-    }
-
-    return localStorage.getItem(
-      ACCESS_TOKEN_KEY,
-    );
+export const authSession = {
+  getCsrfToken(): string | null {
+    return csrfToken;
   },
 
-  setToken(
-    token: string,
-  ) {
-    if (!isBrowser()) {
-      return;
-    }
-
-    localStorage.setItem(
-      ACCESS_TOKEN_KEY,
-      token,
-    );
-  },
-
-  setUser(
-    user: unknown,
-  ) {
-    if (!isBrowser()) {
-      return;
-    }
-
-    localStorage.setItem(
-      USER_KEY,
-      JSON.stringify(
-        user,
-      ),
-    );
+  setCsrfToken(token: string) {
+    csrfToken = token;
   },
 
   clear() {
-    if (!isBrowser()) {
-      return;
-    }
-
-    localStorage.removeItem(
-      ACCESS_TOKEN_KEY,
-    );
-
-    localStorage.removeItem(
-      USER_KEY,
-    );
+    csrfToken = null;
+    removeLegacyCredentials();
   },
+
+  removeLegacyCredentials,
 };

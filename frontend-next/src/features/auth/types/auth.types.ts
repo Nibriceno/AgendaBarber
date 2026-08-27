@@ -18,8 +18,8 @@ export type LoginCredentials = {
 };
 
 export type LoginResponse = {
-  accessToken: string;
   user: AuthUser;
+  csrfToken: string;
 };
 
 export type RegisterClientInput = {

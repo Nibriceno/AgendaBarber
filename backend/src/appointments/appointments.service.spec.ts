@@ -140,6 +140,76 @@ describe('AppointmentsService authenticated client creation', () => {
   });
 });
 
+describe('AppointmentsService paginated administrative agenda', () => {
+  const prisma = {
+    business: {
+      findFirst: jest.fn(),
+    },
+    appointment: {
+      count: jest.fn(),
+      findMany: jest.fn(),
+    },
+    barber: {
+      findMany: jest.fn(),
+    },
+  };
+  const service = new AppointmentsService(prisma as unknown as PrismaService);
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prisma.business.findFirst.mockResolvedValue({
+      timezone: 'America/Santiago',
+      currency: 'CLP',
+    });
+    prisma.appointment.count.mockResolvedValue(45);
+    prisma.appointment.findMany.mockResolvedValue([]);
+    prisma.barber.findMany.mockResolvedValue([]);
+  });
+
+  it('pagina por servidor y limita todas las consultas al tenant autenticado', async () => {
+    const result = await service.findAdminPage(8, {
+      date: '2026-08-26',
+      page: 2,
+      pageSize: 20,
+      status: AppointmentStatus.CONFIRMED,
+      barberId: 7,
+    });
+
+    expect(prisma.appointment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          businessId: 8,
+          status: AppointmentStatus.CONFIRMED,
+          barberId: 7,
+        }),
+        skip: 20,
+        take: 20,
+      }),
+    );
+    expect(prisma.appointment.count).toHaveBeenCalledWith({
+      where: expect.objectContaining({ businessId: 8 }),
+    });
+    expect(result.pagination).toEqual({
+      page: 2,
+      pageSize: 20,
+      total: 45,
+      totalPages: 3,
+    });
+  });
+
+  it('aplica la búsqueda sobre campos permitidos sin perder el tenant', async () => {
+    await service.findAdminPage(8, {
+      date: '2026-08-26',
+      search: 'ana@example.com',
+    });
+
+    const query = prisma.appointment.findMany.mock.calls[0][0];
+
+    expect(query.where.businessId).toBe(8);
+    expect(query.where.OR).toHaveLength(5);
+  });
+});
+
 describe('AppointmentsService barber daily agenda', () => {
   let capturedQuery: unknown;
 

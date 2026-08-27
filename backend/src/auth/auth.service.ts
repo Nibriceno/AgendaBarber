@@ -15,7 +15,12 @@ import { Prisma, UserRole } from '@prisma/client';
 
 import * as bcrypt from 'bcrypt';
 
-import { createHash, randomBytes } from 'node:crypto';
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from 'node:crypto';
 
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -28,8 +33,9 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 
 import { EmailService } from '../email/email.service';
 
-type LoginResponse = {
+type SessionResponse = {
   accessToken: string;
+  refreshToken: string;
 
   user: {
     id: number;
@@ -52,6 +58,17 @@ type MessageResponse = {
   message: string;
 };
 
+type SessionUserData = {
+  id: number;
+  businessId: number;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string | null;
+  role: UserRole;
+  authVersion: number;
+};
+
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
 const EMAIL_RESEND_COOLDOWN_MS = 60 * 1000;
@@ -71,7 +88,7 @@ export class AuthService {
     private readonly configService: ConfigService,
   ) {}
 
-  async login(loginDto: LoginDto): Promise<LoginResponse> {
+  async login(loginDto: LoginDto): Promise<SessionResponse> {
     const normalizedBusinessSlug = loginDto.businessSlug.trim().toLowerCase();
 
     const normalizedEmail = loginDto.email.trim().toLowerCase();
@@ -151,28 +168,133 @@ export class AuthService {
       );
     }
 
-    const payload = {
-      sub: user.id,
-      businessId: user.businessId,
-      role: user.role,
-      authVersion: user.authVersion,
-    };
+    return this.createSession(user, business.slug);
+  }
 
-    const accessToken = await this.jwtService.signAsync(payload);
+  async refreshSession(refreshToken: string): Promise<SessionResponse> {
+    const parsedToken = this.parseRefreshToken(refreshToken);
+
+    if (!parsedToken) {
+      throw new UnauthorizedException('Sesión inválida.');
+    }
+
+    const session = await this.prisma.authSession.findFirst({
+      where: {
+        id: parsedToken.sessionId,
+      },
+      select: {
+        id: true,
+        refreshTokenHash: true,
+        authVersion: true,
+        expiresAt: true,
+        revokedAt: true,
+        user: {
+          select: {
+            id: true,
+            businessId: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            email: true,
+            role: true,
+            authVersion: true,
+            isActive: true,
+            deletedAt: true,
+            business: {
+              select: {
+                slug: true,
+                isActive: true,
+                deletedAt: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const now = new Date();
+    const sessionIsUsable =
+      session &&
+      !session.revokedAt &&
+      session.expiresAt > now &&
+      session.authVersion === session.user.authVersion &&
+      session.user.isActive &&
+      !session.user.deletedAt &&
+      session.user.business.isActive &&
+      !session.user.business.deletedAt;
+
+    if (!sessionIsUsable) {
+      throw new UnauthorizedException('Sesión inválida o vencida.');
+    }
+
+    const presentedHash = this.hashRefreshToken(refreshToken);
+
+    if (!this.hashesMatch(presentedHash, session.refreshTokenHash)) {
+      await this.prisma.authSession.updateMany({
+        where: {
+          id: session.id,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: now,
+        },
+      });
+
+      throw new UnauthorizedException('Sesión inválida.');
+    }
+
+    const rotatedRefreshToken = this.createRefreshToken(session.id);
+    const rotatedHash = this.hashRefreshToken(rotatedRefreshToken);
+
+    const rotated = await this.prisma.authSession.updateMany({
+      where: {
+        id: session.id,
+        refreshTokenHash: session.refreshTokenHash,
+        revokedAt: null,
+        expiresAt: {
+          gt: now,
+        },
+      },
+      data: {
+        refreshTokenHash: rotatedHash,
+      },
+    });
+
+    if (rotated.count !== 1) {
+      throw new UnauthorizedException('La sesión ya fue renovada.');
+    }
+
+    const accessToken = await this.signAccessToken(session.user, session.id);
 
     return {
       accessToken,
+      refreshToken: rotatedRefreshToken,
+      user: this.toSessionUser(session.user, session.user.business.slug),
+    };
+  }
 
-      user: {
-        id: user.id,
-        businessId: user.businessId,
-        businessSlug: business.slug,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        phone: user.phone,
-        email: user.email,
-        role: user.role,
-      },
+  async logout(refreshToken?: string): Promise<MessageResponse> {
+    const parsedToken = refreshToken
+      ? this.parseRefreshToken(refreshToken)
+      : null;
+
+    if (parsedToken && refreshToken) {
+      const refreshTokenHash = this.hashRefreshToken(refreshToken);
+
+      await this.prisma.authSession.updateMany({
+        where: {
+          id: parsedToken.sessionId,
+          refreshTokenHash,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: new Date(),
+        },
+      });
+    }
+
+    return {
+      message: 'Sesión cerrada correctamente.',
     };
   }
 
@@ -742,6 +864,101 @@ export class AuthService {
       message:
         'Contraseña actualizada. Ya puedes iniciar sesión con tu nueva contraseña.',
     };
+  }
+
+  private async createSession(
+    user: SessionUserData,
+    businessSlug: string,
+  ): Promise<SessionResponse> {
+    const sessionId = randomUUID();
+    const refreshToken = this.createRefreshToken(sessionId);
+    const refreshTokenHash = this.hashRefreshToken(refreshToken);
+    const expiresAt = new Date(Date.now() + this.getRefreshTokenTtlMs());
+
+    await this.prisma.authSession.create({
+      data: {
+        id: sessionId,
+        userId: user.id,
+        refreshTokenHash,
+        authVersion: user.authVersion,
+        expiresAt,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    const accessToken = await this.signAccessToken(user, sessionId);
+
+    return {
+      accessToken,
+      refreshToken,
+      user: this.toSessionUser(user, businessSlug),
+    };
+  }
+
+  private signAccessToken(user: SessionUserData, sessionId: string) {
+    return this.jwtService.signAsync({
+      sub: user.id,
+      businessId: user.businessId,
+      role: user.role,
+      authVersion: user.authVersion,
+      sessionId,
+    });
+  }
+
+  private toSessionUser(user: SessionUserData, businessSlug: string) {
+    return {
+      id: user.id,
+      businessId: user.businessId,
+      businessSlug,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      phone: user.phone,
+      email: user.email,
+      role: user.role,
+    };
+  }
+
+  private createRefreshToken(sessionId: string): string {
+    return `${sessionId}.${randomBytes(32).toString('base64url')}`;
+  }
+
+  private parseRefreshToken(
+    refreshToken: string,
+  ): { sessionId: string } | null {
+    const [sessionId, secret, unexpectedPart] = refreshToken.split('.');
+
+    if (
+      unexpectedPart !== undefined ||
+      !sessionId ||
+      !secret ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        sessionId,
+      ) ||
+      !/^[A-Za-z0-9_-]{43}$/.test(secret)
+    ) {
+      return null;
+    }
+
+    return { sessionId };
+  }
+
+  private hashRefreshToken(refreshToken: string): string {
+    return createHash('sha256').update(refreshToken, 'utf8').digest('hex');
+  }
+
+  private hashesMatch(firstHash: string, secondHash: string): boolean {
+    const first = Buffer.from(firstHash, 'hex');
+    const second = Buffer.from(secondHash, 'hex');
+
+    return first.length === second.length && timingSafeEqual(first, second);
+  }
+
+  private getRefreshTokenTtlMs(): number {
+    const days = this.configService.get<number>('REFRESH_TOKEN_EXPIRES_DAYS') ?? 14;
+
+    return days * 24 * 60 * 60 * 1000;
   }
 
   private createEmailVerificationToken() {

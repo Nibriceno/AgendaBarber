@@ -64,6 +64,12 @@ export default function LoginForm() {
     useState("");
 
   const [
+    showPassword,
+    setShowPassword,
+  ] =
+    useState(false);
+
+  const [
     error,
     setError,
   ] =
@@ -252,23 +258,35 @@ export default function LoginForm() {
           )}
         </div>
 
-        <input
-          id="password"
-          type="password"
-          value={
-            password
-          }
-          onChange={(
-            event,
-          ) =>
-            setPassword(
-              event.target.value,
-            )
-          }
-          required
-          autoComplete="current-password"
-          className={AUTH_INPUT_CLASS_NAME}
-        />
+        <span className="relative block">
+          <input
+            id="password"
+            type={showPassword ? "text" : "password"}
+            value={
+              password
+            }
+            onChange={(
+              event,
+            ) =>
+              setPassword(
+                event.target.value,
+              )
+            }
+            required
+            autoComplete="current-password"
+            className={`${AUTH_INPUT_CLASS_NAME} pr-20`}
+          />
+
+          <button
+            type="button"
+            aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+            aria-pressed={showPassword}
+            onClick={() => setShowPassword((current) => !current)}
+            className="absolute right-3 top-1/2 mt-0.5 -translate-y-1/2 rounded px-1 py-0.5 text-xs font-semibold text-zinc-500 transition hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+          >
+            {showPassword ? "Ocultar" : "Ver"}
+          </button>
+        </span>
       </div>
 
       {error && (

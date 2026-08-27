@@ -35,6 +35,7 @@ import { AvailabilityModule } from './availability/availability.module';
 import { AuthModule } from './auth/auth.module';
 import { PublicBookingModule } from './public-booking/public-booking.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { CsrfGuard } from './auth/guards/csrf.guard';
 
 
 
@@ -101,6 +102,10 @@ import { DashboardModule } from './dashboard/dashboard.module';
 
       useClass:
         ThrottlerGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: CsrfGuard,
     },
   ],
 })

@@ -13,6 +13,7 @@ import { UserRole } from '@prisma/client';
 
 import { BusinessesService } from './businesses.service';
 import { UpdateBusinessDto } from './dto/update-business.dto';
+import { UpdateSocialLinksDto } from './dto/update-social-links.dto';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -43,6 +44,27 @@ export class BusinessesController {
     return this.businessesService.findOne(
       currentUser.businessId,
       currentUser.businessId,
+    );
+  }
+
+  @Get('me/social-links')
+  findMySocialLinks(
+    @CurrentUser()
+    currentUser: AuthUser,
+  ) {
+    return this.businessesService.findSocialLinks(currentUser.businessId);
+  }
+
+  @Patch('me/social-links')
+  updateMySocialLinks(
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Body() updateSocialLinksDto: UpdateSocialLinksDto,
+  ) {
+    return this.businessesService.updateSocialLinks(
+      currentUser.businessId,
+      updateSocialLinksDto,
     );
   }
 

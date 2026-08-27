@@ -113,7 +113,8 @@ export function canAccessProtectedRoute(
   if (
     matches("/services") ||
     matches("/categories") ||
-    matches("/booking-settings")
+    matches("/booking-settings") ||
+    matches("/social-links")
   ) {
     return role === "ADMIN";
   }
@@ -153,7 +154,8 @@ export function canAccessProtectedRoute(
    */
   if (
     matches("/barbers") ||
-    matches("/schedules")
+    matches("/schedules") ||
+    matches("/appointments")
   ) {
     return (
       role === "ADMIN" ||

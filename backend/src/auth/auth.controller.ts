@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { randomBytes } from 'node:crypto';
+import type { Request, Response } from 'express';
 
 import { Throttle } from '@nestjs/throttler';
 
@@ -16,10 +27,21 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 
 import type { AuthUser } from './interfaces/auth-user.interface';
+import {
+  CSRF_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+  clearSessionCookies,
+  getRequestCookie,
+  setCsrfCookie,
+  setSessionCookies,
+} from './cookies/auth-cookie.util';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+  ) {}
 
   /*
    * LOGIN
@@ -37,11 +59,89 @@ export class AuthController {
     },
   })
   @Post('login')
-  login(
+  async login(
     @Body()
     loginDto: LoginDto,
+
+    @Res({ passthrough: true })
+    response: Response,
   ) {
-    return this.authService.login(loginDto);
+    const session = await this.authService.login(loginDto);
+    const csrfToken = this.createCsrfToken();
+
+    this.writeSessionCookies(response, session, csrfToken);
+
+    return {
+      user: session.user,
+      csrfToken,
+    };
+  }
+
+  @Throttle({
+    default: {
+      limit: 10,
+      ttl: 60_000,
+    },
+  })
+  @Post('refresh')
+  async refresh(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const refreshToken = getRequestCookie(request, REFRESH_TOKEN_COOKIE);
+
+    if (!refreshToken) {
+      clearSessionCookies(response, this.configService);
+      return this.authService.refreshSession('');
+    }
+
+    try {
+      const session = await this.authService.refreshSession(refreshToken);
+      const csrfToken =
+        getRequestCookie(request, CSRF_TOKEN_COOKIE) ?? this.createCsrfToken();
+
+      this.writeSessionCookies(response, session, csrfToken);
+
+      return {
+        user: session.user,
+        csrfToken,
+      };
+    } catch (error) {
+      clearSessionCookies(response, this.configService);
+      throw error;
+    }
+  }
+
+  @Post('logout')
+  async logout(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.authService.logout(
+      getRequestCookie(request, REFRESH_TOKEN_COOKIE),
+    );
+
+    clearSessionCookies(response, this.configService);
+
+    return result;
+  }
+
+  @Get('csrf')
+  csrf(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const csrfToken =
+      getRequestCookie(request, CSRF_TOKEN_COOKIE) ?? this.createCsrfToken();
+
+    setCsrfCookie(
+      response,
+      this.configService,
+      csrfToken,
+      this.getRefreshTokenTtlMs(),
+    );
+
+    return { csrfToken };
   }
 
   /*
@@ -131,6 +231,40 @@ export class AuthController {
     @CurrentUser()
     currentUser: AuthUser,
   ) {
-    return currentUser;
+    return {
+      id: currentUser.id,
+      businessId: currentUser.businessId,
+      businessSlug: currentUser.businessSlug,
+      role: currentUser.role,
+      firstName: currentUser.firstName,
+      lastName: currentUser.lastName,
+      phone: currentUser.phone,
+      email: currentUser.email,
+    };
+  }
+
+  private writeSessionCookies(
+    response: Response,
+    session: Awaited<ReturnType<AuthService['login']>>,
+    csrfToken: string,
+  ) {
+    setSessionCookies({
+      response,
+      configService: this.configService,
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      refreshTokenMaxAgeMs: this.getRefreshTokenTtlMs(),
+      csrfToken,
+    });
+  }
+
+  private createCsrfToken(): string {
+    return randomBytes(32).toString('base64url');
+  }
+
+  private getRefreshTokenTtlMs(): number {
+    const days = this.configService.get<number>('REFRESH_TOKEN_EXPIRES_DAYS') ?? 14;
+
+    return days * 24 * 60 * 60 * 1000;
   }
 }

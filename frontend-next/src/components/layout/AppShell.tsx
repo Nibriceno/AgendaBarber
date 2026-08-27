@@ -83,8 +83,8 @@ export default function AppShell({
     );
 
   const handleLogout =
-    () => {
-      logout();
+    async () => {
+      await logout();
 
       router.replace(
         `/${businessSlug}/login`,

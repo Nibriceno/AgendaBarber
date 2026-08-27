@@ -86,6 +86,42 @@ describe('BusinessesService tenant isolation', () => {
     expect(prisma.business.updateMany).not.toHaveBeenCalled();
   });
 
+  it('actualiza enlaces sociales solo en el negocio autenticado', async () => {
+    prisma.business.findFirst
+      .mockResolvedValueOnce({
+        id: 7,
+        name: 'AgendaBarber',
+        instagramUrl: null,
+        twitterUrl: null,
+        facebookUrl: null,
+        whatsappUrl: null,
+      })
+      .mockResolvedValueOnce({
+        id: 7,
+        name: 'AgendaBarber',
+        instagramUrl: 'https://instagram.com/agenda-barber',
+        twitterUrl: null,
+        facebookUrl: null,
+        whatsappUrl: null,
+      });
+
+    prisma.business.updateMany.mockResolvedValue({ count: 1 });
+
+    await service.updateSocialLinks(7, {
+      instagramUrl: 'https://instagram.com/agenda-barber',
+    });
+
+    expect(prisma.business.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 7,
+        deletedAt: null,
+      },
+      data: {
+        instagramUrl: 'https://instagram.com/agenda-barber',
+      },
+    });
+  });
+
   it('rechaza eliminar un negocio de otro tenant', async () => {
     await expect(service.remove(7, 99)).rejects.toBeInstanceOf(
       NotFoundException,

@@ -29,6 +29,10 @@ export async function getCurrentUser(): Promise<AuthUser> {
   return response.data;
 }
 
+export async function logoutRequest(): Promise<void> {
+  await apiClient.post("/auth/logout");
+}
+
 export async function registerClientRequest(
   input: RegisterClientInput,
 ): Promise<RegisterClientResponse> {

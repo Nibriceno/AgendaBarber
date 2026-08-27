@@ -9,12 +9,18 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 
 import { UserRole } from '@prisma/client';
+import type { Request } from 'express';
+import {
+  ACCESS_TOKEN_COOKIE,
+  getRequestCookie,
+} from '../cookies/auth-cookie.util';
 
 type JwtPayload = {
   sub: number;
   businessId: number;
   role: UserRole;
   authVersion?: number;
+  sessionId: string;
 };
 
 @Injectable()
@@ -31,7 +37,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        (request: Request) => getRequestCookie(request, ACCESS_TOKEN_COOKIE) ?? null,
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ]),
 
       ignoreExpiration: false,
 
@@ -40,6 +49,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
+    if (!payload.sessionId) {
+      throw new UnauthorizedException('Sesión inválida.');
+    }
+
     const user = await this.prisma.user.findFirst({
       where: {
         id: payload.sub,
@@ -49,6 +62,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         isActive: true,
 
         deletedAt: null,
+
+        authSessions: {
+          some: {
+            id: payload.sessionId,
+            authVersion: payload.authVersion ?? 0,
+            revokedAt: null,
+            expiresAt: {
+              gt: new Date(),
+            },
+          },
+        },
       },
 
       select: {
@@ -78,6 +102,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     return {
+      sessionId: payload.sessionId,
       id: user.id,
       businessId: user.businessId,
       businessSlug: user.business.slug,

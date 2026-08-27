@@ -22,6 +22,7 @@ import { ClientCancelAppointmentDto } from './dto/client-cancel-appointment.dto'
 import { BarberUpdateStatusDto } from './dto/barber-update-status.dto';
 import { BarberAppointmentsQueryDto } from './dto/barber-appointments-query.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
+import { AdminAppointmentsQueryDto } from './dto/admin-appointments-query.dto';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -55,6 +56,18 @@ export class AppointmentsController {
     currentUser: AuthUser,
   ) {
     return this.appointmentsService.findAll(currentUser.businessId);
+  }
+
+  @Get('admin-page')
+  @Roles(UserRole.ADMIN, UserRole.RECEPTIONIST)
+  findAdminPage(
+    @CurrentUser()
+    currentUser: AuthUser,
+
+    @Query()
+    query: AdminAppointmentsQueryDto,
+  ) {
+    return this.appointmentsService.findAdminPage(currentUser.businessId, query);
   }
 
   @Get('my')

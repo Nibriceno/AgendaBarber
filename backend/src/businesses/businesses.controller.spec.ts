@@ -8,7 +8,9 @@ describe('BusinessesController', () => {
   const businessesService = {
     findAll: jest.fn(),
     findOne: jest.fn(),
+    findSocialLinks: jest.fn(),
     update: jest.fn(),
+    updateSocialLinks: jest.fn(),
     remove: jest.fn(),
   };
 
@@ -59,6 +61,30 @@ describe('BusinessesController', () => {
     expect(businessesService.update).toHaveBeenCalledWith(7, 99, {
       name: 'Nuevo nombre',
     });
+  });
+
+  it('consulta únicamente los enlaces sociales del negocio autenticado', async () => {
+    businessesService.findSocialLinks.mockResolvedValue({
+      id: 7,
+      instagramUrl: null,
+    });
+
+    await controller.findMySocialLinks(currentUser);
+
+    expect(businessesService.findSocialLinks).toHaveBeenCalledWith(7);
+  });
+
+  it('actualiza los enlaces sociales usando el businessId autenticado', async () => {
+    const input = {
+      instagramUrl: 'https://instagram.com/agenda-barber',
+      whatsappUrl: null,
+    };
+
+    businessesService.updateSocialLinks.mockResolvedValue({ id: 7, ...input });
+
+    await controller.updateMySocialLinks(currentUser, input);
+
+    expect(businessesService.updateSocialLinks).toHaveBeenCalledWith(7, input);
   });
 
   it('propaga el businessId autenticado al eliminar', async () => {

@@ -1,8 +1,9 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 
 import * as bcrypt from 'bcrypt';
 
 import { UserRole } from '@prisma/client';
+import { createHash } from 'node:crypto';
 
 import { AuthService } from './auth.service';
 
@@ -66,6 +67,11 @@ describe('AuthService', () => {
         }>
       >(),
     },
+    authSession: {
+      create: jest.fn(),
+      findFirst: jest.fn(),
+      updateMany: jest.fn(),
+    },
   };
 
   const jwtService = {
@@ -81,6 +87,9 @@ describe('AuthService', () => {
 
   const configService = {
     getOrThrow: jest.fn(() => 'http://localhost:3001'),
+    get: jest.fn((key: string) =>
+      key === 'REFRESH_TOKEN_EXPIRES_DAYS' ? 14 : undefined,
+    ),
   };
 
   let service: AuthService;
@@ -95,6 +104,9 @@ describe('AuthService', () => {
     verificationEmailInput = undefined;
     passwordResetEmailInput = undefined;
     updateInput = undefined;
+    jwtService.signAsync.mockResolvedValue('access-token');
+    prisma.authSession.create.mockResolvedValue({ id: 'session-id' });
+    prisma.authSession.updateMany.mockResolvedValue({ count: 1 });
 
     service = new AuthService(
       prisma as never,
@@ -216,6 +228,154 @@ describe('AuthService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
 
     expect(jwtService.signAsync).not.toHaveBeenCalled();
+  });
+
+  it('inicia sesión sin exponer el refresh token en la base de datos', async () => {
+    const passwordHash = await bcrypt.hash('ClaveSegura1', 4);
+
+    prisma.business.findFirst.mockResolvedValue({
+      id: 7,
+      slug: 'barber-booking',
+    });
+    prisma.user.findFirst.mockResolvedValue({
+      id: 21,
+      businessId: 7,
+      firstName: 'Ana',
+      lastName: 'Pérez',
+      phone: '+56912345678',
+      email: 'ana@example.com',
+      role: UserRole.CLIENT,
+      passwordHash,
+      emailVerified: true,
+      authVersion: 3,
+    });
+
+    const result = await service.login({
+      businessSlug: 'barber-booking',
+      email: 'ana@example.com',
+      password: 'ClaveSegura1',
+    });
+
+    expect(result.accessToken).toBe('access-token');
+    expect(result.refreshToken).toMatch(
+      /^[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/i,
+    );
+    expect(prisma.authSession.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: 21,
+          authVersion: 3,
+          refreshTokenHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+          expiresAt: expect.any(Date),
+        }),
+      }),
+    );
+    const storedHash = prisma.authSession.create.mock.calls[0][0].data
+      .refreshTokenHash;
+    expect(storedHash).not.toBe(result.refreshToken);
+    expect(jwtService.signAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sub: 21,
+        businessId: 7,
+        authVersion: 3,
+        sessionId: expect.any(String),
+      }),
+    );
+  });
+
+  it('rota el refresh token y no reutiliza el secreto anterior', async () => {
+    const sessionId = '6b43cb99-d1ab-4f10-b15f-bd31a3ac84a8';
+    const refreshToken = `${sessionId}.${'a'.repeat(43)}`;
+    const refreshTokenHash = createHash('sha256')
+      .update(refreshToken)
+      .digest('hex');
+
+    prisma.authSession.findFirst.mockResolvedValue({
+      id: sessionId,
+      refreshTokenHash,
+      authVersion: 3,
+      expiresAt: new Date(Date.now() + 60_000),
+      revokedAt: null,
+      user: {
+        id: 21,
+        businessId: 7,
+        firstName: 'Ana',
+        lastName: 'Pérez',
+        phone: '+56912345678',
+        email: 'ana@example.com',
+        role: UserRole.CLIENT,
+        authVersion: 3,
+        isActive: true,
+        deletedAt: null,
+        business: {
+          slug: 'barber-booking',
+          isActive: true,
+          deletedAt: null,
+        },
+      },
+    });
+
+    const result = await service.refreshSession(refreshToken);
+
+    expect(result.refreshToken).not.toBe(refreshToken);
+    expect(prisma.authSession.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: sessionId,
+          refreshTokenHash,
+        }),
+        data: {
+          refreshTokenHash: expect.not.stringMatching(refreshTokenHash),
+        },
+      }),
+    );
+  });
+
+  it('revoca la sesión cuando se reutiliza un refresh token reemplazado', async () => {
+    const sessionId = '6b43cb99-d1ab-4f10-b15f-bd31a3ac84a8';
+    const refreshToken = `${sessionId}.${'b'.repeat(43)}`;
+
+    prisma.authSession.findFirst.mockResolvedValue({
+      id: sessionId,
+      refreshTokenHash: 'c'.repeat(64),
+      authVersion: 3,
+      expiresAt: new Date(Date.now() + 60_000),
+      revokedAt: null,
+      user: {
+        authVersion: 3,
+        isActive: true,
+        deletedAt: null,
+        business: { isActive: true, deletedAt: null },
+      },
+    });
+
+    await expect(service.refreshSession(refreshToken)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(prisma.authSession.updateMany).toHaveBeenCalledWith({
+      where: { id: sessionId, revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
+  });
+
+  it('revoca el refresh token actual al cerrar sesión', async () => {
+    const sessionId = '6b43cb99-d1ab-4f10-b15f-bd31a3ac84a8';
+    const refreshToken = `${sessionId}.${'d'.repeat(43)}`;
+    const refreshTokenHash = createHash('sha256')
+      .update(refreshToken)
+      .digest('hex');
+
+    const result = await service.logout(refreshToken);
+
+    expect(prisma.authSession.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: sessionId,
+        refreshTokenHash,
+        revokedAt: null,
+      },
+      data: { revokedAt: expect.any(Date) },
+    });
+    expect(result).toEqual({ message: 'Sesión cerrada correctamente.' });
   });
 
   it('responde igual cuando el correo de recuperación no existe', async () => {

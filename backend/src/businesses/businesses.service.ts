@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateBusinessDto } from './dto/update-business.dto';
+import { UpdateSocialLinksDto } from './dto/update-social-links.dto';
 
 @Injectable()
 export class BusinessesService {
@@ -73,6 +74,46 @@ export class BusinessesService {
     });
 
     return this.findOne(businessId, id);
+  }
+
+  async findSocialLinks(businessId: number) {
+    const business = await this.prisma.business.findFirst({
+      where: {
+        id: businessId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        instagramUrl: true,
+        twitterUrl: true,
+        facebookUrl: true,
+        whatsappUrl: true,
+      },
+    });
+
+    if (!business) {
+      throw new NotFoundException('Negocio no encontrado');
+    }
+
+    return business;
+  }
+
+  async updateSocialLinks(
+    businessId: number,
+    updateSocialLinksDto: UpdateSocialLinksDto,
+  ) {
+    await this.findSocialLinks(businessId);
+
+    await this.prisma.business.updateMany({
+      where: {
+        id: businessId,
+        deletedAt: null,
+      },
+      data: updateSocialLinksDto,
+    });
+
+    return this.findSocialLinks(businessId);
   }
 
   async remove(businessId: number, id: number) {

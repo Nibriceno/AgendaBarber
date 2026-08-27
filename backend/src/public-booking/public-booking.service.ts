@@ -47,6 +47,12 @@ export class PublicBookingService {
       email: business.email,
       address: business.address,
       logoUrl: business.logoUrl,
+      socialLinks: {
+        instagram: business.instagramUrl,
+        twitter: business.twitterUrl,
+        facebook: business.facebookUrl,
+        whatsapp: business.whatsappUrl,
+      },
       timezone: business.timezone,
       currency: business.currency,
       bookingPolicy: {
@@ -849,6 +855,10 @@ export class PublicBookingService {
         email: true,
         address: true,
         logoUrl: true,
+        instagramUrl: true,
+        twitterUrl: true,
+        facebookUrl: true,
+        whatsappUrl: true,
         timezone: true,
         currency: true,
         appointmentInterval: true,

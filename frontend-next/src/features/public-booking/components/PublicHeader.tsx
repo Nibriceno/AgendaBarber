@@ -58,9 +58,9 @@ export default function PublicHeader({
     };
   }, [menuOpen]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setMenuOpen(false);
-    logout();
+    await logout();
     router.push(`/${businessSlug}`);
   };
 

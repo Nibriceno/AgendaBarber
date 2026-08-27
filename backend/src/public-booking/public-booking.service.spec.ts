@@ -42,6 +42,10 @@ describe('PublicBookingService guest management access', () => {
       email: null,
       address: null,
       logoUrl: null,
+      instagramUrl: 'https://instagram.com/agenda-barber',
+      twitterUrl: null,
+      facebookUrl: null,
+      whatsappUrl: 'https://wa.me/56912345678',
       timezone: 'America/Santiago',
       currency: 'CLP',
       appointmentInterval: 15,
@@ -52,6 +56,17 @@ describe('PublicBookingService guest management access', () => {
       allowClientCancellation: true,
       allowClientRescheduling: true,
       cancellationPolicy: null,
+    });
+  });
+
+  it('expone únicamente los enlaces sociales configurados como parte del negocio público', async () => {
+    const result = await service.findBusiness('barber-booking');
+
+    expect(result.socialLinks).toEqual({
+      instagram: 'https://instagram.com/agenda-barber',
+      twitter: null,
+      facebook: null,
+      whatsapp: 'https://wa.me/56912345678',
     });
   });
 

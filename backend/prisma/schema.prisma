@@ -34,15 +34,19 @@ enum DayOfWeek {
 }
 
 model Business {
-  id       Int     @id @default(autoincrement())
-  name     String
-  slug     String  @unique
-  phone    String?
-  email    String?
-  address  String?
-  logoUrl  String?
-  timezone String  @default("America/Santiago")
-  currency String  @default("CLP")
+  id           Int     @id @default(autoincrement())
+  name         String
+  slug         String  @unique
+  phone        String?
+  email        String?
+  address      String?
+  logoUrl      String?
+  instagramUrl String? @db.VarChar(500)
+  twitterUrl   String? @db.VarChar(500)
+  facebookUrl  String? @db.VarChar(500)
+  whatsappUrl  String? @db.VarChar(500)
+  timezone     String  @default("America/Santiago")
+  currency     String  @default("CLP")
 
   appointmentInterval Int @default(15)
   minimumAdvanceTime  Int @default(60)
@@ -106,6 +110,7 @@ model User {
 
   appointments              Appointment[]        @relation("CustomerAppointments")
   appointmentHistoryEntries AppointmentHistory[] @relation("AppointmentHistoryActor")
+  authSessions              AuthSession[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -117,6 +122,21 @@ model User {
   @@index([firstName, lastName])
   @@index([isActive])
   @@map("users")
+}
+
+model AuthSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           Int
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String    @unique @db.VarChar(64)
+  authVersion      Int
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([userId, revokedAt, expiresAt])
+  @@map("auth_sessions")
 }
 
 model Barber {

@@ -103,6 +103,20 @@ export function validateEnvironment(config: EnvironmentVariables) {
       ? config.JWT_EXPIRES_IN.trim()
       : '15m';
 
+  const refreshTokenExpiresDays = Number(
+    config.REFRESH_TOKEN_EXPIRES_DAYS ?? 14,
+  );
+
+  if (
+    !Number.isInteger(refreshTokenExpiresDays) ||
+    refreshTokenExpiresDays < 1 ||
+    refreshTokenExpiresDays > 90
+  ) {
+    throw new Error(
+      'REFRESH_TOKEN_EXPIRES_DAYS debe ser un entero entre 1 y 90.',
+    );
+  }
+
   let frontendUrl: string;
 
   if (typeof config.FRONTEND_URL === 'string' && config.FRONTEND_URL.trim()) {
@@ -176,6 +190,8 @@ export function validateEnvironment(config: EnvironmentVariables) {
     JWT_SECRET: jwtSecret,
 
     JWT_EXPIRES_IN: jwtExpiresIn,
+
+    REFRESH_TOKEN_EXPIRES_DAYS: refreshTokenExpiresDays,
 
     FRONTEND_URL: frontendUrl,
 

@@ -1,104 +1,74 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
+import { SocialIcon } from "@/components/icons/SocialIcon";
 import {
-  SITE_SOCIAL_LINKS,
+  BUSINESS_SOCIAL_LINKS_UPDATED_EVENT,
+  SOCIAL_NETWORKS,
 } from "@/config/site";
+import { getPublicBusiness } from "@/features/public-booking/api/public-booking.api";
+import type { PublicBusiness } from "@/features/public-booking/types/public-booking.types";
 
-type SocialIconName =
-  (typeof SITE_SOCIAL_LINKS)[number]["icon"];
-
-type SocialIconProps = {
-  name: SocialIconName;
-};
-
-function SocialIcon({
-  name,
-}: SocialIconProps) {
-  if (name === "instagram") {
-    return (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        className="h-5 w-5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-      >
-        <rect
-          x="3"
-          y="3"
-          width="18"
-          height="18"
-          rx="5"
-        />
-        <circle
-          cx="12"
-          cy="12"
-          r="4"
-        />
-        <circle
-          cx="17.5"
-          cy="6.5"
-          r="1"
-          fill="currentColor"
-          stroke="none"
-        />
-      </svg>
-    );
-  }
-
-  if (name === "x") {
-    return (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        className="h-5 w-5"
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="1.8"
-      >
-        <path d="M5 4l14 16" />
-        <path d="M19 4L5 20" />
-      </svg>
-    );
-  }
-
-  if (name === "facebook") {
-    return (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        className="h-5 w-5"
-        fill="currentColor"
-      >
-        <path d="M13.7 21v-8h2.8l.4-3.1h-3.2v-2c0-.9.3-1.5 1.6-1.5H17V3.6c-.7-.1-1.5-.2-2.3-.2-2.3 0-3.9 1.4-3.9 4.1v2.3H8.2V13h2.6v8h2.9Z" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-5 w-5"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.7"
-    >
-      <path d="M20 11.6a8 8 0 0 1-11.9 7L4 20l1.4-4A8 8 0 1 1 20 11.6Z" />
-      <path d="M9 8.2c.3 3 2 4.8 5 5.7" />
-      <path d="m9 8.2 1.5-.6 1.1 2-1 .9" />
-      <path d="m14 13.9.8-1 2 .9-.4 1.5" />
-    </svg>
-  );
-}
+type FooterBusiness = Pick<PublicBusiness, "name" | "slug" | "socialLinks">;
 
 export default function SiteFooter() {
-  const currentYear =
-    new Date().getFullYear();
+  const pathname = usePathname();
+  const [footerBusiness, setFooterBusiness] = useState<FooterBusiness | null>(null);
+  const currentYear = new Date().getFullYear();
+
+  const businessSlug = useMemo(() => {
+    const firstSegment = pathname.split("/").filter(Boolean)[0];
+
+    return firstSegment && firstSegment !== "terms" ? firstSegment : null;
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!businessSlug) return;
+
+    let active = true;
+    let controller: AbortController | null = null;
+
+    const loadBusiness = () => {
+      controller?.abort();
+      controller = new AbortController();
+
+      void getPublicBusiness(businessSlug, controller.signal)
+        .then((business) => {
+          if (active) {
+            setFooterBusiness({
+              name: business.name,
+              slug: business.slug,
+              socialLinks: business.socialLinks,
+            });
+          }
+        })
+        .catch(() => {
+          // El footer sigue siendo funcional aunque la API pública no responda.
+        });
+    };
+
+    loadBusiness();
+    window.addEventListener(BUSINESS_SOCIAL_LINKS_UPDATED_EVENT, loadBusiness);
+
+    return () => {
+      active = false;
+      controller?.abort();
+      window.removeEventListener(BUSINESS_SOCIAL_LINKS_UPDATED_EVENT, loadBusiness);
+    };
+  }, [businessSlug]);
+
+  const currentBusiness =
+    footerBusiness?.slug === businessSlug ? footerBusiness : null;
+  const businessName = currentBusiness?.name ?? "AgendaBarber";
+  const homeHref = businessSlug ? `/${businessSlug}` : "/";
+  const configuredNetworks = SOCIAL_NETWORKS.flatMap((network) => {
+    const href = currentBusiness?.socialLinks?.[network.key];
+
+    return href ? [{ ...network, href }] : [];
+  });
 
   return (
     <footer className="relative z-50 overflow-hidden bg-zinc-950 text-white">
@@ -109,7 +79,7 @@ export default function SiteFooter() {
         <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
           <div>
             <Link
-              href="/"
+              href={homeHref}
               className="inline-flex items-center gap-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50"
             >
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-[11px] font-bold text-zinc-950">
@@ -118,9 +88,8 @@ export default function SiteFooter() {
 
               <span>
                 <span className="block font-semibold tracking-tight text-white">
-                  AgendaBarber
+                  {businessName}
                 </span>
-
                 <span className="block text-xs text-zinc-400">
                   Reservas simples y seguras
                 </span>
@@ -128,42 +97,35 @@ export default function SiteFooter() {
             </Link>
 
             <p className="mt-2 max-w-xl text-xs leading-5 text-zinc-400 sm:text-sm">
-              Una experiencia de reservas clara para clientes y una operación más ordenada para cada barbería.
+              Una experiencia de reservas clara para clientes y una operación
+              más ordenada para cada barbería.
             </p>
           </div>
 
-          <nav
-            aria-label="Redes sociales"
-          >
-            <ul className="flex flex-wrap gap-1 sm:justify-end">
-              {SITE_SOCIAL_LINKS.map(
-                (social) => (
-                  <li
-                    key={social.icon}
-                  >
+          {configuredNetworks.length > 0 && (
+            <nav aria-label={`Redes sociales de ${businessName}`}>
+              <ul className="flex flex-wrap gap-1 sm:justify-end">
+                {configuredNetworks.map((social) => (
+                  <li key={social.key}>
                     <a
                       href={social.href}
                       target="_blank"
                       rel="noreferrer noopener"
-                      aria-label={`${social.label} de AgendaBarber (abre en una pestaña nueva)`}
+                      aria-label={`${social.label} de ${businessName} (abre en una pestaña nueva)`}
                       title={social.label}
                       className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/[0.08] hover:text-white focus:outline-none focus:ring-2 focus:ring-white/40"
                     >
-                      <SocialIcon
-                        name={social.icon}
-                      />
+                      <SocialIcon name={social.icon} />
                     </a>
                   </li>
-                ),
-              )}
-            </ul>
-          </nav>
+                ))}
+              </ul>
+            </nav>
+          )}
         </div>
 
         <div className="mt-4 flex flex-col gap-2 border-t border-white/10 pt-3 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
-          <span>
-            © {currentYear} AgendaBarber. Todos los derechos reservados.
-          </span>
+          <span>© {currentYear} {businessName}. Todos los derechos reservados.</span>
 
           <Link
             href="/terms"

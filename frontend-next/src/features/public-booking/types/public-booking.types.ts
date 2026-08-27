@@ -13,6 +13,12 @@ export type PublicBusiness = {
   email: string | null;
   address: string | null;
   logoUrl: string | null;
+  socialLinks: {
+    instagram: string | null;
+    twitter: string | null;
+    facebook: string | null;
+    whatsapp: string | null;
+  };
   timezone: string;
   currency: string;
   bookingPolicy: BookingPolicy;

@@ -98,6 +98,7 @@ async function bootstrap() {
     allowedHeaders: [
       'Content-Type',
       'Authorization',
+      'X-CSRF-Token',
 
       /*
        * Necesario para consultar,

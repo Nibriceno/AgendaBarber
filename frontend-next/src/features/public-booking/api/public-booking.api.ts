@@ -57,11 +57,13 @@ async function getPublicResource<T>(
 
 export async function getPublicBusiness(
   businessSlug: string,
+  signal?: AbortSignal,
 ): Promise<PublicBusiness> {
   return getPublicResource<PublicBusiness>(
     `/public/${encodeURIComponent(
       businessSlug,
     )}/business`,
+    signal,
   );
 }
 

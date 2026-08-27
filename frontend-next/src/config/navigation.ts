@@ -72,8 +72,23 @@ export const APP_NAVIGATION:
     },
 
     {
+      label: "Agenda",
+      segment: "appointments",
+      roles: [
+        "ADMIN",
+        "RECEPTIONIST",
+      ],
+    },
+
+    {
       label: "Políticas de reserva",
       segment: "booking-settings",
+      roles: ["ADMIN"],
+    },
+
+    {
+      label: "Redes sociales",
+      segment: "social-links",
       roles: ["ADMIN"],
     },
   ];

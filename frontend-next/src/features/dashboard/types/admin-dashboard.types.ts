@@ -1,10 +1,6 @@
-export type DashboardAppointmentStatus =
-  | "PENDING"
-  | "CONFIRMED"
-  | "IN_PROGRESS"
-  | "COMPLETED"
-  | "CANCELLED"
-  | "NO_SHOW";
+import type { AppointmentDisplayStatus } from "@/features/appointment-management/lib/appointment-display";
+
+export type DashboardAppointmentStatus = AppointmentDisplayStatus;
 
 export type DashboardAppointment = {
   id: number;

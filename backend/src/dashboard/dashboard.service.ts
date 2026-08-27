@@ -55,9 +55,18 @@ export class DashboardService {
         where: {
           businessId,
           deletedAt: null,
+          status: {
+            in: [
+              AppointmentStatus.PENDING,
+              AppointmentStatus.CONFIRMED,
+              AppointmentStatus.IN_PROGRESS,
+            ],
+          },
           startAt: {
-            gte: periods.todayStart,
             lt: periods.tomorrowStart,
+          },
+          endAt: {
+            gt: new Date(),
           },
         },
         select: {
@@ -91,6 +100,7 @@ export class DashboardService {
         orderBy: {
           startAt: 'asc',
         },
+        take: 10,
       }),
 
       this.prisma.appointment.groupBy({

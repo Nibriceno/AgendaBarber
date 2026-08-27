@@ -16,6 +16,12 @@ import {
 } from "@/features/auth/context/AuthContext";
 
 import {
+  APPOINTMENT_STATUS_CONFIG,
+  formatAppointmentMoney,
+  formatAppointmentTime,
+} from "@/features/appointment-management/lib/appointment-display";
+
+import {
   getApiErrorMessage,
 } from "@/lib/api/errors";
 
@@ -26,82 +32,11 @@ import {
 import type {
   AdminDashboardSummary,
   DashboardAppointment,
-  DashboardAppointmentStatus,
 } from "../types/admin-dashboard.types";
 
 type AdminDashboardOverviewProps = {
   businessSlug: string;
 };
-
-const STATUS_CONFIG: Record<
-  DashboardAppointmentStatus,
-  {
-    label: string;
-    className: string;
-  }
-> = {
-  PENDING: {
-    label: "Pendiente",
-    className:
-      "bg-amber-50 text-amber-700 ring-amber-600/20",
-  },
-  CONFIRMED: {
-    label: "Confirmada",
-    className:
-      "bg-sky-50 text-sky-700 ring-sky-600/20",
-  },
-  IN_PROGRESS: {
-    label: "En atención",
-    className:
-      "bg-violet-50 text-violet-700 ring-violet-600/20",
-  },
-  COMPLETED: {
-    label: "Completada",
-    className:
-      "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
-  },
-  CANCELLED: {
-    label: "Cancelada",
-    className:
-      "bg-red-50 text-red-700 ring-red-600/20",
-  },
-  NO_SHOW: {
-    label: "No asistió",
-    className:
-      "bg-zinc-100 text-zinc-600 ring-zinc-500/20",
-  },
-};
-
-function formatMoney(
-  value: string,
-  currency: string,
-) {
-  const amount =
-    Number(value);
-
-  try {
-    return new Intl.NumberFormat(
-      "es-CL",
-      {
-        style: "currency",
-        currency,
-        maximumFractionDigits: 0,
-      },
-    ).format(
-      Number.isFinite(amount)
-        ? amount
-        : 0,
-    );
-  } catch {
-    return `$${new Intl.NumberFormat(
-      "es-CL",
-    ).format(
-      Number.isFinite(amount)
-        ? amount
-        : 0,
-    )}`;
-  }
-}
 
 function formatDashboardDate(
   date: string,
@@ -119,23 +54,6 @@ function formatDashboardDate(
     new Date(
       `${date}T12:00:00.000Z`,
     ),
-  );
-}
-
-function formatTime(
-  date: string,
-  timezone: string,
-) {
-  return new Intl.DateTimeFormat(
-    "es-CL",
-    {
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-      timeZone: timezone,
-    },
-  ).format(
-    new Date(date),
   );
 }
 
@@ -216,7 +134,7 @@ function AppointmentRow({
   currency: string;
 }) {
   const status =
-    STATUS_CONFIG[
+    APPOINTMENT_STATUS_CONFIG[
       appointment.status
     ];
 
@@ -224,7 +142,7 @@ function AppointmentRow({
     <li className="grid gap-3 border-b border-zinc-100 px-4 py-4 last:border-b-0 sm:grid-cols-[72px_minmax(0,1fr)_auto] sm:items-center sm:px-5">
       <div>
         <p className="text-lg font-semibold tabular-nums text-zinc-950">
-          {formatTime(
+          {formatAppointmentTime(
             appointment.startAt,
             timezone,
           )}
@@ -232,7 +150,7 @@ function AppointmentRow({
 
         <p className="text-[11px] tabular-nums text-zinc-400">
           hasta{" "}
-          {formatTime(
+          {formatAppointmentTime(
             appointment.endAt,
             timezone,
           )}
@@ -269,7 +187,7 @@ function AppointmentRow({
       </div>
 
       <p className="text-sm font-semibold tabular-nums text-zinc-950 sm:text-right">
-        {formatMoney(
+        {formatAppointmentMoney(
           appointment.totalPrice,
           currency,
         )}
@@ -548,7 +466,7 @@ export default function AdminDashboardOverview({
 
         <MetricCard
           label="Ingresos de hoy"
-          value={formatMoney(
+          value={formatAppointmentMoney(
             summary.today.revenue,
             summary.currency,
           )}
@@ -558,7 +476,7 @@ export default function AdminDashboardOverview({
 
         <MetricCard
           label="Ingresos del mes"
-          value={formatMoney(
+          value={formatAppointmentMoney(
             summary.month.revenue,
             summary.currency,
           )}
@@ -581,20 +499,20 @@ export default function AdminDashboardOverview({
           <div className="flex items-start justify-between gap-4 border-b border-zinc-100 px-4 py-4 sm:px-5">
             <div>
               <h3 className="font-semibold text-zinc-950">
-                Agenda de hoy
+                Próximas atenciones
               </h3>
 
               <p className="mt-1 text-xs text-zinc-500">
-                Ordenada por hora de atención
+                Hasta 10 reservas activas de hoy
               </p>
             </div>
 
-            <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-600">
-              {
-                summary.today
-                  .totalAppointments
-              }
-            </span>
+            <Link
+              href={`/${businessSlug}/appointments`}
+              className="shrink-0 rounded-full bg-zinc-950 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+            >
+              Ver agenda completa
+            </Link>
           </div>
 
           {summary.today.appointments
@@ -618,11 +536,11 @@ export default function AdminDashboardOverview({
                 </div>
 
                 <p className="mt-4 font-medium text-zinc-800">
-                  No hay reservas para hoy
+                  No quedan atenciones activas
                 </p>
 
                 <p className="mt-1 text-sm text-zinc-500">
-                  Las nuevas reservas aparecerán aquí automáticamente.
+                  Puedes revisar reservas anteriores, canceladas o futuras en la agenda completa.
                 </p>
               </div>
             </div>
@@ -764,7 +682,7 @@ export default function AdminDashboardOverview({
                         </p>
 
                         <p className="mt-0.5 text-xs text-zinc-500">
-                          {formatMoney(
+                          {formatAppointmentMoney(
                             service.revenue,
                             summary.currency,
                           )}{" "}
@@ -848,7 +766,7 @@ export default function AdminDashboardOverview({
                           member.completedAppointments
                         }{" "}
                         completadas · Ticket{" "}
-                        {formatMoney(
+                        {formatAppointmentMoney(
                           member.averageTicket,
                           summary.currency,
                         )}
@@ -856,7 +774,7 @@ export default function AdminDashboardOverview({
                     </div>
 
                     <p className="text-sm font-semibold tabular-nums text-zinc-950">
-                      {formatMoney(
+                      {formatAppointmentMoney(
                         member.revenue,
                         summary.currency,
                       )}

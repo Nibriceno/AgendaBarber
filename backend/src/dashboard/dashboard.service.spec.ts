@@ -115,9 +115,13 @@ describe('DashboardService', () => {
       prisma.appointment.findMany,
     ).toHaveBeenCalledWith(
       expect.objectContaining({
+        take: 10,
         where:
           expect.objectContaining({
             businessId: 17,
+            endAt: {
+              gt: expect.any(Date),
+            },
           }),
       }),
     );

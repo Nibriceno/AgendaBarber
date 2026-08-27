@@ -18,6 +18,7 @@ import { ClientRescheduleAppointmentDto } from './dto/client-reschedule-appointm
 import { BarberUpdateStatusDto } from './dto/barber-update-status.dto';
 import { BarberAppointmentsQueryDto } from './dto/barber-appointments-query.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
+import { AdminAppointmentsQueryDto } from './dto/admin-appointments-query.dto';
 import {
   addDaysToDateKey,
   getLocalDateKey,
@@ -582,6 +583,176 @@ export class AppointmentsService {
         startAt: 'asc',
       },
     });
+  }
+
+  async findAdminPage(
+    businessId: number,
+    query: AdminAppointmentsQueryDto = {},
+  ) {
+    const business = await this.prisma.business.findFirst({
+      where: {
+        id: businessId,
+        isActive: true,
+        deletedAt: null,
+      },
+      select: {
+        timezone: true,
+        currency: true,
+      },
+    });
+
+    if (!business) {
+      throw new NotFoundException('Barbería no encontrada.');
+    }
+
+    const date = query.date ?? getLocalDateKey(new Date(), business.timezone);
+
+    if (!isValidDateKey(date)) {
+      throw new BadRequestException('La fecha seleccionada no es válida.');
+    }
+
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const nextDate = addDaysToDateKey(date, 1);
+    const search = query.search?.trim();
+
+    const where: Prisma.AppointmentWhereInput = {
+      businessId,
+      deletedAt: null,
+      startAt: {
+        gte: localDateMinuteToUtc(date, 0, business.timezone),
+        lt: localDateMinuteToUtc(nextDate, 0, business.timezone),
+      },
+      ...(query.status !== undefined && {
+        status: query.status,
+      }),
+      ...(query.barberId !== undefined && {
+        barberId: query.barberId,
+      }),
+      ...(search && {
+        OR: [
+          {
+            confirmationCode: {
+              contains: search,
+              mode: Prisma.QueryMode.insensitive,
+            },
+          },
+          {
+            customer: {
+              firstName: {
+                contains: search,
+                mode: Prisma.QueryMode.insensitive,
+              },
+            },
+          },
+          {
+            customer: {
+              lastName: {
+                contains: search,
+                mode: Prisma.QueryMode.insensitive,
+              },
+            },
+          },
+          {
+            customer: {
+              email: {
+                contains: search,
+                mode: Prisma.QueryMode.insensitive,
+              },
+            },
+          },
+          {
+            customer: {
+              phone: {
+                contains: search,
+              },
+            },
+          },
+        ],
+      }),
+    };
+
+    const [total, appointments, barbers] = await Promise.all([
+      this.prisma.appointment.count({ where }),
+      this.prisma.appointment.findMany({
+        where,
+        select: {
+          id: true,
+          startAt: true,
+          endAt: true,
+          status: true,
+          totalPrice: true,
+          totalDurationMinutes: true,
+          confirmationCode: true,
+          customer: {
+            select: {
+              firstName: true,
+              lastName: true,
+              phone: true,
+              email: true,
+              isRegistered: true,
+            },
+          },
+          barber: {
+            select: {
+              id: true,
+              displayName: true,
+              calendarColor: true,
+            },
+          },
+          services: {
+            orderBy: {
+              displayOrder: 'asc',
+            },
+            select: {
+              serviceName: true,
+            },
+          },
+        },
+        orderBy: [{ startAt: 'asc' }, { id: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.barber.findMany({
+        where: {
+          businessId,
+          isActive: true,
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          displayName: true,
+          calendarColor: true,
+        },
+        orderBy: [{ displayOrder: 'asc' }, { displayName: 'asc' }],
+      }),
+    ]);
+
+    return {
+      generatedAt: new Date().toISOString(),
+      date,
+      timezone: business.timezone,
+      currency: business.currency,
+      items: appointments.map((appointment) => ({
+        id: appointment.id,
+        startAt: appointment.startAt.toISOString(),
+        endAt: appointment.endAt.toISOString(),
+        status: appointment.status,
+        totalPrice: appointment.totalPrice.toString(),
+        totalDurationMinutes: appointment.totalDurationMinutes,
+        confirmationCode: appointment.confirmationCode,
+        customer: appointment.customer,
+        barber: appointment.barber,
+        services: appointment.services.map((service) => service.serviceName),
+      })),
+      barbers,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      },
+    };
   }
 
   async findByBusiness(businessId: number) {

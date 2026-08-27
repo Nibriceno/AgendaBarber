@@ -12,11 +12,12 @@ import {
 import {
   getCurrentUser,
   loginRequest,
+  logoutRequest,
 } from "../api/auth.api";
 
 import {
   AUTH_UNAUTHORIZED_EVENT,
-  authStorage,
+  authSession,
 } from "../lib/auth-storage";
 
 import type {
@@ -35,7 +36,7 @@ type AuthContextValue = {
     credentials: LoginCredentials,
   ) => Promise<AuthUser>;
 
-  logout: () => void;
+  logout: () => Promise<void>;
 
   refreshUser: () => Promise<void>;
 };
@@ -68,7 +69,7 @@ export function AuthProvider({
 
   const clearSession =
     useCallback(() => {
-      authStorage.clear();
+      authSession.clear();
 
       setUser(
         null,
@@ -78,21 +79,6 @@ export function AuthProvider({
   const refreshUser =
     useCallback(
       async () => {
-        const token =
-          authStorage.getToken();
-
-        if (!token) {
-          setUser(
-            null,
-          );
-
-          setLoading(
-            false,
-          );
-
-          return;
-        }
-
         setLoading(
           true,
         );
@@ -105,9 +91,6 @@ export function AuthProvider({
             currentUser,
           );
 
-          authStorage.setUser(
-            currentUser,
-          );
         } catch {
           clearSession();
         } finally {
@@ -128,12 +111,8 @@ export function AuthProvider({
         credentials,
       );
 
-    authStorage.setToken(
-      result.accessToken,
-    );
-
-    authStorage.setUser(
-      result.user,
+    authSession.setCsrfToken(
+      result.csrfToken,
     );
 
     setUser(
@@ -143,14 +122,35 @@ export function AuthProvider({
     return result.user;
   };
 
-  const logout = () => {
-    clearSession();
+  const logout = async () => {
+    try {
+      await logoutRequest();
+    } finally {
+      clearSession();
+    }
   };
 
   useEffect(() => {
-    void refreshUser();
+    let active = true;
+
+    authSession.removeLegacyCredentials();
+
+    void getCurrentUser()
+      .then((currentUser) => {
+        if (active) setUser(currentUser);
+      })
+      .catch(() => {
+        if (active) clearSession();
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, [
-    refreshUser,
+    clearSession,
   ]);
 
   /*

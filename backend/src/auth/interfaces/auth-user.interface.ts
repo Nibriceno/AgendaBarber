@@ -1,6 +1,7 @@
 import { UserRole } from '@prisma/client';
 
 export interface AuthUser {
+  sessionId?: string;
   id: number;
   businessId: number;
   businessSlug: string;
