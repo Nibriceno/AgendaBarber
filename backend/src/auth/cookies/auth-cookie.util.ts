@@ -4,7 +4,37 @@ import type { ConfigService } from '@nestjs/config';
 export const ACCESS_TOKEN_COOKIE = 'ab_access';
 export const REFRESH_TOKEN_COOKIE = 'ab_refresh';
 export const CSRF_TOKEN_COOKIE = 'ab_csrf';
+export const PLATFORM_ACCESS_TOKEN_COOKIE = 'ab_platform_access';
+export const PLATFORM_REFRESH_TOKEN_COOKIE = 'ab_platform_refresh';
+export const PLATFORM_CSRF_TOKEN_COOKIE = 'ab_platform_csrf';
 export const CSRF_HEADER = 'x-csrf-token';
+
+type SessionCookieDefinition = {
+  accessName: string;
+  accessPath: string;
+  refreshName: string;
+  refreshPath: string;
+  csrfName: string;
+  csrfPath: string;
+};
+
+const TENANT_SESSION_COOKIES: SessionCookieDefinition = {
+  accessName: ACCESS_TOKEN_COOKIE,
+  accessPath: '/',
+  refreshName: REFRESH_TOKEN_COOKIE,
+  refreshPath: '/auth',
+  csrfName: CSRF_TOKEN_COOKIE,
+  csrfPath: '/',
+};
+
+const PLATFORM_SESSION_COOKIES: SessionCookieDefinition = {
+  accessName: PLATFORM_ACCESS_TOKEN_COOKIE,
+  accessPath: '/platform',
+  refreshName: PLATFORM_REFRESH_TOKEN_COOKIE,
+  refreshPath: '/platform/auth',
+  csrfName: PLATFORM_CSRF_TOKEN_COOKIE,
+  csrfPath: '/platform',
+};
 
 export function getRequestCookie(
   request: Pick<Request, 'headers'>,
@@ -61,20 +91,66 @@ export function setSessionCookies({
   refreshTokenMaxAgeMs: number;
   csrfToken: string;
 }) {
+  setNamedSessionCookies(
+    TENANT_SESSION_COOKIES,
+    response,
+    configService,
+    accessToken,
+    refreshToken,
+    refreshTokenMaxAgeMs,
+    csrfToken,
+  );
+}
+
+export function setPlatformSessionCookies({
+  response,
+  configService,
+  accessToken,
+  refreshToken,
+  refreshTokenMaxAgeMs,
+  csrfToken,
+}: {
+  response: Response;
+  configService: ConfigService;
+  accessToken: string;
+  refreshToken: string;
+  refreshTokenMaxAgeMs: number;
+  csrfToken: string;
+}) {
+  setNamedSessionCookies(
+    PLATFORM_SESSION_COOKIES,
+    response,
+    configService,
+    accessToken,
+    refreshToken,
+    refreshTokenMaxAgeMs,
+    csrfToken,
+  );
+}
+
+function setNamedSessionCookies(
+  definition: SessionCookieDefinition,
+  response: Response,
+  configService: ConfigService,
+  accessToken: string,
+  refreshToken: string,
+  refreshTokenMaxAgeMs: number,
+  csrfToken: string,
+) {
   const baseOptions = baseCookieOptions(configService);
 
-  response.cookie(ACCESS_TOKEN_COOKIE, accessToken, {
+  response.cookie(definition.accessName, accessToken, {
     ...baseOptions,
-    path: '/',
+    path: definition.accessPath,
   });
-  response.cookie(REFRESH_TOKEN_COOKIE, refreshToken, {
+  response.cookie(definition.refreshName, refreshToken, {
     ...baseOptions,
-    path: '/auth',
+    path: definition.refreshPath,
     maxAge: refreshTokenMaxAgeMs,
   });
-  response.cookie(CSRF_TOKEN_COOKIE, csrfToken, {
+  response.cookie(definition.csrfName, csrfToken, {
     ...baseOptions,
-    path: '/',
+    path: definition.csrfPath,
     maxAge: refreshTokenMaxAgeMs,
   });
 }
@@ -85,9 +161,43 @@ export function setCsrfCookie(
   csrfToken: string,
   maxAge: number,
 ) {
-  response.cookie(CSRF_TOKEN_COOKIE, csrfToken, {
+  setNamedCsrfCookie(
+    response,
+    configService,
+    CSRF_TOKEN_COOKIE,
+    '/',
+    csrfToken,
+    maxAge,
+  );
+}
+
+export function setPlatformCsrfCookie(
+  response: Response,
+  configService: ConfigService,
+  csrfToken: string,
+  maxAge: number,
+) {
+  setNamedCsrfCookie(
+    response,
+    configService,
+    PLATFORM_CSRF_TOKEN_COOKIE,
+    '/platform',
+    csrfToken,
+    maxAge,
+  );
+}
+
+function setNamedCsrfCookie(
+  response: Response,
+  configService: ConfigService,
+  name: string,
+  path: string,
+  csrfToken: string,
+  maxAge: number,
+) {
+  response.cookie(name, csrfToken, {
     ...baseCookieOptions(configService),
-    path: '/',
+    path,
     maxAge,
   });
 }
@@ -96,9 +206,33 @@ export function clearSessionCookies(
   response: Response,
   configService: ConfigService,
 ) {
+  clearNamedSessionCookies(response, configService, TENANT_SESSION_COOKIES);
+}
+
+export function clearPlatformSessionCookies(
+  response: Response,
+  configService: ConfigService,
+) {
+  clearNamedSessionCookies(response, configService, PLATFORM_SESSION_COOKIES);
+}
+
+function clearNamedSessionCookies(
+  response: Response,
+  configService: ConfigService,
+  definition: SessionCookieDefinition,
+) {
   const baseOptions = baseCookieOptions(configService);
 
-  response.clearCookie(ACCESS_TOKEN_COOKIE, { ...baseOptions, path: '/' });
-  response.clearCookie(REFRESH_TOKEN_COOKIE, { ...baseOptions, path: '/auth' });
-  response.clearCookie(CSRF_TOKEN_COOKIE, { ...baseOptions, path: '/' });
+  response.clearCookie(definition.accessName, {
+    ...baseOptions,
+    path: definition.accessPath,
+  });
+  response.clearCookie(definition.refreshName, {
+    ...baseOptions,
+    path: definition.refreshPath,
+  });
+  response.clearCookie(definition.csrfName, {
+    ...baseOptions,
+    path: definition.csrfPath,
+  });
 }

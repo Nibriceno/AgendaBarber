@@ -1,4 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
+import { BusinessStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -36,7 +37,7 @@ describe('BarbersService', () => {
         where: {
           id: 27,
           deletedAt: null,
-          isActive: true,
+          status: BusinessStatus.ACTIVE,
         },
         select: {
           id: true,

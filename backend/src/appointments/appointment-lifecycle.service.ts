@@ -8,6 +8,7 @@ import { AppointmentStatus } from '@prisma/client';
 
 import { EmailService } from '../email/email.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ACTIVE_BUSINESS_WHERE } from '../businesses/business-status';
 
 const PROCESS_INTERVAL_MS = 60_000;
 const PROCESS_BATCH_SIZE = 100;
@@ -45,10 +46,7 @@ export class AppointmentLifecycleService
         status: AppointmentStatus.PENDING,
         startAt: { lte: now },
         deletedAt: null,
-        business: {
-          isActive: true,
-          deletedAt: null,
-        },
+        business: ACTIVE_BUSINESS_WHERE,
       },
       select: {
         id: true,

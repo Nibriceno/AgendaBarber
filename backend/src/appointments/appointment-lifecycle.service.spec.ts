@@ -1,4 +1,4 @@
-import { AppointmentStatus } from '@prisma/client';
+import { AppointmentStatus, BusinessStatus } from '@prisma/client';
 
 import { AppointmentLifecycleService } from './appointment-lifecycle.service';
 import type { EmailService } from '../email/email.service';
@@ -69,6 +69,17 @@ describe('AppointmentLifecycleService', () => {
 
     await expect(service.processExpiredPendingAppointments(now)).resolves.toBe(
       1,
+    );
+
+    expect(appointmentFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          business: {
+            status: BusinessStatus.ACTIVE,
+            deletedAt: null,
+          },
+        }),
+      }),
     );
 
     expect(appointmentUpdateMany).toHaveBeenCalledWith({

@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { createHash, timingSafeEqual } from 'crypto';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { ACTIVE_BUSINESS_WHERE } from '../businesses/business-status';
 
 import { AvailabilityService } from '../availability/availability.service';
 import { CheckAvailabilityDto } from '../availability/dto/check-availability.dto';
@@ -837,10 +838,7 @@ export class PublicBookingService {
     const business = await this.prisma.business.findFirst({
       where: {
         slug: normalizedSlug,
-
-        isActive: true,
-
-        deletedAt: null,
+        ...ACTIVE_BUSINESS_WHERE,
       },
 
       /*

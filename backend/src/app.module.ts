@@ -1,25 +1,14 @@
 import { Module } from '@nestjs/common';
 
-import {
-  APP_GUARD,
-} from '@nestjs/core';
+import { APP_GUARD } from '@nestjs/core';
 
-import {
-  StaffModule
-} from './staff/staff.module';
+import { StaffModule } from './staff/staff.module';
 
-import {
-  ConfigModule,
-} from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
 
-import {
-  ThrottlerGuard,
-  ThrottlerModule,
-} from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
-import {
-  validateEnvironment,
-} from './config/env.validation';
+import { validateEnvironment } from './config/env.validation';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { BusinessesModule } from './businesses/businesses.module';
@@ -36,8 +25,8 @@ import { AuthModule } from './auth/auth.module';
 import { PublicBookingModule } from './public-booking/public-booking.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { CsrfGuard } from './auth/guards/csrf.guard';
-
-
+import { PlatformAuthModule } from './platform-auth/platform-auth.module';
+import { PlatformBusinessesModule } from './platform-businesses/platform-businesses.module';
 
 @Module({
   imports: [
@@ -49,8 +38,7 @@ import { CsrfGuard } from './auth/guards/csrf.guard';
      */
     ConfigModule.forRoot({
       isGlobal: true,
-      validate:
-        validateEnvironment,
+      validate: validateEnvironment,
     }),
 
     /*
@@ -83,10 +71,11 @@ import { CsrfGuard } from './auth/guards/csrf.guard';
     AppointmentsModule,
     AvailabilityModule,
     AuthModule,
+    PlatformAuthModule,
+    PlatformBusinessesModule,
     PublicBookingModule,
     DashboardModule,
   ],
-
 
   providers: [
     /*
@@ -94,11 +83,9 @@ import { CsrfGuard } from './auth/guards/csrf.guard';
      * de forma global.
      */
     {
-      provide:
-        APP_GUARD,
+      provide: APP_GUARD,
 
-      useClass:
-        ThrottlerGuard,
+      useClass: ThrottlerGuard,
     },
     {
       provide: APP_GUARD,

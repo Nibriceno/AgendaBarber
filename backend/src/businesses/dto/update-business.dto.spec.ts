@@ -21,7 +21,7 @@ describe('UpdateBusinessDto tenant-owned fields', () => {
 
   it.each([
     ['slug', 'another-tenant'],
-    ['isActive', true],
+    ['status', 'SUSPENDED'],
   ])('rejects the platform-owned field %s', async (field, value) => {
     const dto = plainToInstance(UpdateBusinessDto, {
       [field]: value,

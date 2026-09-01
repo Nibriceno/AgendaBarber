@@ -14,6 +14,16 @@ enum UserRole {
   CLIENT
 }
 
+enum PlatformRole {
+  SUPER_ADMIN
+}
+
+enum BusinessStatus {
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
 enum AppointmentStatus {
   PENDING
   CONFIRMED
@@ -67,18 +77,24 @@ model Business {
   barberStartEarlyMinutes Int @default(15)
   noShowGraceMinutes      Int @default(15)
 
-  isActive  Boolean   @default(true)
+  status          BusinessStatus @default(ACTIVE)
+  statusChangedAt DateTime       @default(now())
+  statusReason    String?        @db.VarChar(1000)
+  suspendedAt     DateTime?
+  inactivatedAt   DateTime?
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
   users        User[]
+  invitations  BusinessInvitation[]
   barbers      Barber[]
   categories   Category[]
   services     Service[]
   appointments Appointment[]
 
-  @@index([isActive])
+  @@index([status])
   @@map("businesses")
 }
 
@@ -117,6 +133,7 @@ model User {
   appointments              Appointment[]        @relation("CustomerAppointments")
   appointmentHistoryEntries AppointmentHistory[] @relation("AppointmentHistoryActor")
   authSessions              AuthSession[]
+  businessInvitation        BusinessInvitation?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -143,6 +160,76 @@ model AuthSession {
 
   @@index([userId, revokedAt, expiresAt])
   @@map("auth_sessions")
+}
+
+model PlatformUser {
+  id Int @id @default(autoincrement())
+
+  firstName String
+  lastName  String
+  email     String @unique
+
+  passwordHash String
+  role         PlatformRole @default(SUPER_ADMIN)
+
+  isActive    Boolean   @default(true)
+  authVersion Int       @default(0)
+  lastLoginAt DateTime?
+
+  authSessions            PlatformAuthSession[]
+  sentBusinessInvitations BusinessInvitation[]  @relation("PlatformInvitationSender")
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([isActive])
+  @@map("platform_users")
+}
+
+model PlatformAuthSession {
+  id String @id @default(uuid()) @db.Uuid
+
+  platformUserId Int
+  platformUser   PlatformUser @relation(fields: [platformUserId], references: [id], onDelete: Cascade)
+
+  refreshTokenHash String    @unique @db.VarChar(64)
+  authVersion      Int
+  expiresAt        DateTime
+  revokedAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([platformUserId, revokedAt, expiresAt])
+  @@map("platform_auth_sessions")
+}
+
+model BusinessInvitation {
+  id Int @id @default(autoincrement())
+
+  businessId Int
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  invitedByPlatformUserId Int?
+  invitedByPlatformUser   PlatformUser? @relation("PlatformInvitationSender", fields: [invitedByPlatformUserId], references: [id], onDelete: SetNull)
+
+  email      String
+  tokenHash  String    @unique @db.VarChar(64)
+  expiresAt  DateTime
+  sentAt     DateTime?
+  acceptedAt DateTime?
+  revokedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, acceptedAt, revokedAt])
+  @@index([email, expiresAt])
+  @@map("business_invitations")
 }
 
 model Barber {

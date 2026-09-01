@@ -14,6 +14,7 @@ import {
 import * as bcrypt from 'bcrypt';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { ACTIVE_BUSINESS_WHERE } from '../businesses/business-status';
 import { UsersService } from '../users/users.service';
 
 import { CreateStaffMemberDto } from './dto/create-staff-member.dto';
@@ -544,11 +545,7 @@ export class StaffService {
           id:
             businessId,
 
-          isActive:
-            true,
-
-          deletedAt:
-            null,
+          ...ACTIVE_BUSINESS_WHERE,
         },
 
         select: {

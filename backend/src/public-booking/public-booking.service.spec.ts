@@ -1,5 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { createHash } from 'crypto';
+import { BusinessStatus } from '@prisma/client';
 
 import { PublicBookingService } from './public-booking.service';
 
@@ -61,6 +62,16 @@ describe('PublicBookingService guest management access', () => {
 
   it('expone únicamente los enlaces sociales configurados como parte del negocio público', async () => {
     const result = await service.findBusiness('barber-booking');
+
+    expect(prisma.business.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          slug: 'barber-booking',
+          status: BusinessStatus.ACTIVE,
+          deletedAt: null,
+        },
+      }),
+    );
 
     expect(result.socialLinks).toEqual({
       instagram: 'https://instagram.com/agenda-barber',

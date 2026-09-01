@@ -9,6 +9,7 @@ import {
 } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { ACTIVE_BUSINESS_WHERE } from '../businesses/business-status';
 
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
@@ -313,8 +314,7 @@ export class ServicesService {
       await this.prisma.business.findFirst({
         where: {
           id: businessId,
-          deletedAt: null,
-          isActive: true,
+          ...ACTIVE_BUSINESS_WHERE,
         },
 
         select: {

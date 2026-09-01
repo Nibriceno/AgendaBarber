@@ -12,6 +12,7 @@ import { Prisma, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { ACTIVE_BUSINESS_WHERE } from '../businesses/business-status';
 
 import { CreateUserDto } from './dto/create-user.dto';
 import { CreateBarberAccessDto } from './dto/create-barber-access.dto';
@@ -853,10 +854,7 @@ export class UsersService {
     const business = await this.prisma.business.findFirst({
       where: {
         id: businessId,
-
-        deletedAt: null,
-
-        isActive: true,
+        ...ACTIVE_BUSINESS_WHERE,
       },
 
       select: {

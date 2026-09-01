@@ -10,6 +10,7 @@ import {
 } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { ACTIVE_BUSINESS_WHERE } from '../businesses/business-status';
 import { CheckAvailabilityDto } from './dto/check-availability.dto';
 
 @Injectable()
@@ -26,8 +27,7 @@ export class AvailabilityService {
       await this.prisma.business.findFirst({
         where: {
           id: businessId,
-          isActive: true,
-          deletedAt: null,
+          ...ACTIVE_BUSINESS_WHERE,
         },
 
         select: {

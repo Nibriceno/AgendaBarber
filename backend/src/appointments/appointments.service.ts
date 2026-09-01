@@ -16,6 +16,7 @@ import {
 } from '@prisma/client';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { ACTIVE_BUSINESS_WHERE } from '../businesses/business-status';
 import { EmailService } from '../email/email.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -147,8 +148,7 @@ export class AppointmentsService {
     const business = await this.prisma.business.findFirst({
       where: {
         id: currentUser.businessId,
-        isActive: true,
-        deletedAt: null,
+        ...ACTIVE_BUSINESS_WHERE,
       },
       select: {
         timezone: true,
@@ -692,8 +692,7 @@ export class AppointmentsService {
     const business = await this.prisma.business.findFirst({
       where: {
         id: businessId,
-        isActive: true,
-        deletedAt: null,
+        ...ACTIVE_BUSINESS_WHERE,
       },
       select: {
         timezone: true,
@@ -1308,8 +1307,7 @@ export class AppointmentsService {
     const business = await prismaClient.business.findFirst({
       where: {
         id: businessId,
-        isActive: true,
-        deletedAt: null,
+        ...ACTIVE_BUSINESS_WHERE,
       },
     });
 

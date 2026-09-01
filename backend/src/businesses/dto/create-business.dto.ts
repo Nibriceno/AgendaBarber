@@ -1,7 +1,9 @@
 import { Transform } from 'class-transformer';
+import { BusinessStatus } from '@prisma/client';
 import {
   IsBoolean,
   IsEmail,
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -92,6 +94,6 @@ export class CreateBusinessDto {
   cancellationPolicy?: string;
 
   @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
+  @IsEnum(BusinessStatus)
+  status?: BusinessStatus;
 }

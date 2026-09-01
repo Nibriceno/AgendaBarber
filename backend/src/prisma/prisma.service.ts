@@ -17,6 +17,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
           passwordResetTokenHash: true,
         },
 
+        platformUser: {
+          passwordHash: true,
+        },
+
+        businessInvitation: {
+          tokenHash: true,
+        },
+
         /*
          * El hash del token de gestión
          * de una reserva guest es secreto

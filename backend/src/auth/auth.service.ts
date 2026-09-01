@@ -32,6 +32,10 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 
 import { EmailService } from '../email/email.service';
+import {
+  ACTIVE_BUSINESS_WHERE,
+  isBusinessOperational,
+} from '../businesses/business-status';
 
 type SessionResponse = {
   accessToken: string;
@@ -96,8 +100,7 @@ export class AuthService {
     const business = await this.prisma.business.findFirst({
       where: {
         slug: normalizedBusinessSlug,
-        isActive: true,
-        deletedAt: null,
+        ...ACTIVE_BUSINESS_WHERE,
       },
 
       select: {
@@ -203,7 +206,7 @@ export class AuthService {
             business: {
               select: {
                 slug: true,
-                isActive: true,
+                status: true,
                 deletedAt: true,
               },
             },
@@ -220,8 +223,7 @@ export class AuthService {
       session.authVersion === session.user.authVersion &&
       session.user.isActive &&
       !session.user.deletedAt &&
-      session.user.business.isActive &&
-      !session.user.business.deletedAt;
+      isBusinessOperational(session.user.business);
 
     if (!sessionIsUsable) {
       throw new UnauthorizedException('Sesión inválida o vencida.');
@@ -316,8 +318,7 @@ export class AuthService {
     const business = await this.prisma.business.findFirst({
       where: {
         slug: normalizedBusinessSlug,
-        isActive: true,
-        deletedAt: null,
+        ...ACTIVE_BUSINESS_WHERE,
       },
 
       select: {
@@ -484,8 +485,7 @@ export class AuthService {
 
         business: {
           slug: normalizedBusinessSlug,
-          isActive: true,
-          deletedAt: null,
+          ...ACTIVE_BUSINESS_WHERE,
         },
       },
 
@@ -575,8 +575,7 @@ export class AuthService {
 
         business: {
           slug: normalizedBusinessSlug,
-          isActive: true,
-          deletedAt: null,
+          ...ACTIVE_BUSINESS_WHERE,
         },
       },
 
@@ -679,8 +678,7 @@ export class AuthService {
         deletedAt: null,
         business: {
           slug: normalizedBusinessSlug,
-          isActive: true,
-          deletedAt: null,
+          ...ACTIVE_BUSINESS_WHERE,
         },
       },
       select: {
@@ -785,8 +783,7 @@ export class AuthService {
         deletedAt: null,
         business: {
           slug: normalizedBusinessSlug,
-          isActive: true,
-          deletedAt: null,
+          ...ACTIVE_BUSINESS_WHERE,
         },
       },
       select: {
@@ -899,6 +896,7 @@ export class AuthService {
 
   private signAccessToken(user: SessionUserData, sessionId: string) {
     return this.jwtService.signAsync({
+      tokenType: 'tenant',
       sub: user.id,
       businessId: user.businessId,
       role: user.role,

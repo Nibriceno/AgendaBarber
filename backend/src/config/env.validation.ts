@@ -103,6 +103,22 @@ export function validateEnvironment(config: EnvironmentVariables) {
       ? config.JWT_EXPIRES_IN.trim()
       : '15m';
 
+  const platformJwtSecret =
+    typeof config.PLATFORM_JWT_SECRET === 'string' &&
+    config.PLATFORM_JWT_SECRET.trim()
+      ? config.PLATFORM_JWT_SECRET.trim()
+      : jwtSecret;
+
+  if (platformJwtSecret.length < 32) {
+    throw new Error('PLATFORM_JWT_SECRET debe tener al menos 32 caracteres.');
+  }
+
+  const platformJwtExpiresIn =
+    typeof config.PLATFORM_JWT_EXPIRES_IN === 'string' &&
+    config.PLATFORM_JWT_EXPIRES_IN.trim()
+      ? config.PLATFORM_JWT_EXPIRES_IN.trim()
+      : jwtExpiresIn;
+
   const refreshTokenExpiresDays = Number(
     config.REFRESH_TOKEN_EXPIRES_DAYS ?? 14,
   );
@@ -114,6 +130,20 @@ export function validateEnvironment(config: EnvironmentVariables) {
   ) {
     throw new Error(
       'REFRESH_TOKEN_EXPIRES_DAYS debe ser un entero entre 1 y 90.',
+    );
+  }
+
+  const platformRefreshTokenExpiresDays = Number(
+    config.PLATFORM_REFRESH_TOKEN_EXPIRES_DAYS ?? refreshTokenExpiresDays,
+  );
+
+  if (
+    !Number.isInteger(platformRefreshTokenExpiresDays) ||
+    platformRefreshTokenExpiresDays < 1 ||
+    platformRefreshTokenExpiresDays > 90
+  ) {
+    throw new Error(
+      'PLATFORM_REFRESH_TOKEN_EXPIRES_DAYS debe ser un entero entre 1 y 90.',
     );
   }
 
@@ -191,7 +221,13 @@ export function validateEnvironment(config: EnvironmentVariables) {
 
     JWT_EXPIRES_IN: jwtExpiresIn,
 
+    PLATFORM_JWT_SECRET: platformJwtSecret,
+
+    PLATFORM_JWT_EXPIRES_IN: platformJwtExpiresIn,
+
     REFRESH_TOKEN_EXPIRES_DAYS: refreshTokenExpiresDays,
+
+    PLATFORM_REFRESH_TOKEN_EXPIRES_DAYS: platformRefreshTokenExpiresDays,
 
     FRONTEND_URL: frontendUrl,
 

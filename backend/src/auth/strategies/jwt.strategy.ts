@@ -14,8 +14,10 @@ import {
   ACCESS_TOKEN_COOKIE,
   getRequestCookie,
 } from '../cookies/auth-cookie.util';
+import { ACTIVE_BUSINESS_WHERE } from '../../businesses/business-status';
 
 type JwtPayload = {
+  tokenType: 'tenant';
   sub: number;
   businessId: number;
   role: UserRole;
@@ -49,7 +51,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    if (!payload.sessionId) {
+    if (payload.tokenType !== 'tenant' || !payload.sessionId) {
       throw new UnauthorizedException('Sesión inválida.');
     }
 
@@ -63,10 +65,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
         deletedAt: null,
 
-        business: {
-          isActive: true,
-          deletedAt: null,
-        },
+        business: ACTIVE_BUSINESS_WHERE,
 
         authSessions: {
           some: {

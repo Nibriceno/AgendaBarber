@@ -11,6 +11,9 @@ import {
   ACCESS_TOKEN_COOKIE,
   CSRF_HEADER,
   CSRF_TOKEN_COOKIE,
+  PLATFORM_ACCESS_TOKEN_COOKIE,
+  PLATFORM_CSRF_TOKEN_COOKIE,
+  PLATFORM_REFRESH_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,
   getRequestCookie,
 } from '../cookies/auth-cookie.util';
@@ -24,14 +27,25 @@ export class CsrfGuard implements CanActivate {
 
     if (SAFE_METHODS.has(request.method.toUpperCase())) return true;
 
+    const isPlatformRequest = request.path?.startsWith('/platform') ?? false;
+    const accessCookie = isPlatformRequest
+      ? PLATFORM_ACCESS_TOKEN_COOKIE
+      : ACCESS_TOKEN_COOKIE;
+    const refreshCookie = isPlatformRequest
+      ? PLATFORM_REFRESH_TOKEN_COOKIE
+      : REFRESH_TOKEN_COOKIE;
+    const csrfCookie = isPlatformRequest
+      ? PLATFORM_CSRF_TOKEN_COOKIE
+      : CSRF_TOKEN_COOKIE;
+
     const usesCookieAuthentication = Boolean(
-      getRequestCookie(request, ACCESS_TOKEN_COOKIE) ||
-        getRequestCookie(request, REFRESH_TOKEN_COOKIE),
+      getRequestCookie(request, accessCookie) ||
+        getRequestCookie(request, refreshCookie),
     );
 
     if (!usesCookieAuthentication) return true;
 
-    const cookieToken = getRequestCookie(request, CSRF_TOKEN_COOKIE);
+    const cookieToken = getRequestCookie(request, csrfCookie);
     const headerValue = request.headers[CSRF_HEADER];
     const headerToken = Array.isArray(headerValue) ? headerValue[0] : headerValue;
 

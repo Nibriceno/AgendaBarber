@@ -18,6 +18,13 @@ type SendPasswordResetInput = {
   resetUrl: string;
 };
 
+type SendBusinessAdminInvitationInput = {
+  to: string;
+  firstName: string;
+  businessName: string;
+  invitationUrl: string;
+};
+
 type SendGuestBookingConfirmationInput = {
   to: string;
   firstName: string;
@@ -183,6 +190,54 @@ export class EmailService {
                   <p style="margin:18px 0 0;line-height:1.7;color:#52525b">Hola ${safeFirstName}, utiliza el siguiente botón para crear una nueva contraseña segura.</p>
                   <a href="${safeResetUrl}" style="display:inline-block;margin-top:24px;padding:14px 22px;border-radius:12px;background:#18181b;color:#ffffff;text-decoration:none;font-weight:700">Crear nueva contraseña</a>
                   <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#71717a">El enlace vence en 30 minutos y solo funciona una vez. Si no solicitaste este cambio, ignora este mensaje; tu contraseña no será modificada.</p>
+                </div>
+              </div>
+            </div>
+          </body>
+        </html>
+      `,
+    });
+  }
+
+  async sendBusinessAdminInvitation({
+    to,
+    firstName,
+    businessName,
+    invitationUrl,
+  }: SendBusinessAdminInvitationInput): Promise<void> {
+    const safeFirstName = escapeHtml(firstName);
+    const safeBusinessName = escapeHtml(businessName);
+    const safeInvitationUrl = escapeHtml(invitationUrl);
+
+    await this.transporter.sendMail({
+      from: this.from,
+      to,
+      subject: `${businessName}: activa tu cuenta de administrador`,
+      text: [
+        `Hola ${firstName},`,
+        '',
+        `Fuiste invitado a administrar ${businessName} en AgendaBarber.`,
+        'Crea tu contraseña desde este enlace privado:',
+        invitationUrl,
+        '',
+        'El enlace vence en 72 horas y solo puede utilizarse una vez.',
+        'Si no esperabas esta invitación, puedes ignorar este mensaje.',
+      ].join('\n'),
+      html: `
+        <!doctype html>
+        <html lang="es">
+          <body style="margin:0;background:#f4f4f5;font-family:Arial,sans-serif;color:#18181b">
+            <div style="padding:32px 16px">
+              <div style="max-width:560px;margin:0 auto;overflow:hidden;border-radius:24px;background:#ffffff;border:1px solid #e4e4e7">
+                <div style="padding:24px 28px;background:#09090b;color:#ffffff">
+                  <strong style="font-size:18px">${safeBusinessName}</strong>
+                  <div style="margin-top:4px;font-size:12px;color:#a1a1aa">Invitación de AgendaBarber</div>
+                </div>
+                <div style="padding:32px 28px">
+                  <h1 style="margin:0;font-size:26px;line-height:1.2">Activa tu cuenta de administrador</h1>
+                  <p style="margin:18px 0 0;line-height:1.7;color:#52525b">Hola ${safeFirstName}, crea tu contraseña para comenzar a administrar la barbería.</p>
+                  <a href="${safeInvitationUrl}" style="display:inline-block;margin-top:24px;padding:14px 22px;border-radius:12px;background:#18181b;color:#ffffff;text-decoration:none;font-weight:700">Aceptar invitación</a>
+                  <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#71717a">El enlace vence en 72 horas y funciona una sola vez. Si no esperabas esta invitación, ignora este correo.</p>
                 </div>
               </div>
             </div>

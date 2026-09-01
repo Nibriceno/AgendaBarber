@@ -1,6 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { UserRole } from '@prisma/client';
+import { BusinessStatus, UserRole } from '@prisma/client';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtStrategy } from './jwt.strategy';
@@ -23,6 +23,7 @@ describe('JwtStrategy business state', () => {
   let strategy: JwtStrategy;
 
   const payload = {
+    tokenType: 'tenant' as const,
     sub: 15,
     businessId: 7,
     role: UserRole.ADMIN,
@@ -77,7 +78,7 @@ describe('JwtStrategy business state', () => {
       isActive: true,
       deletedAt: null,
       business: {
-        isActive: true,
+        status: BusinessStatus.ACTIVE,
         deletedAt: null,
       },
     });
@@ -89,5 +90,16 @@ describe('JwtStrategy business state', () => {
     await expect(strategy.validate(payload)).rejects.toThrow(
       UnauthorizedException,
     );
+  });
+
+  it('rejects platform tokens before querying tenant users', async () => {
+    await expect(
+      strategy.validate({
+        ...payload,
+        tokenType: 'platform' as never,
+      }),
+    ).rejects.toThrow(UnauthorizedException);
+
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
   });
 });

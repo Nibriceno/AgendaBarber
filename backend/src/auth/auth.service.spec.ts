@@ -2,7 +2,7 @@ import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 
 import * as bcrypt from 'bcrypt';
 
-import { UserRole } from '@prisma/client';
+import { BusinessStatus, UserRole } from '@prisma/client';
 import { createHash } from 'node:crypto';
 
 import { AuthService } from './auth.service';
@@ -256,6 +256,16 @@ describe('AuthService', () => {
       password: 'ClaveSegura1',
     });
 
+    expect(prisma.business.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          slug: 'barber-booking',
+          status: BusinessStatus.ACTIVE,
+          deletedAt: null,
+        },
+      }),
+    );
+
     expect(result.accessToken).toBe('access-token');
     expect(result.refreshToken).toMatch(
       /^[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/i,
@@ -275,6 +285,7 @@ describe('AuthService', () => {
     expect(storedHash).not.toBe(result.refreshToken);
     expect(jwtService.signAsync).toHaveBeenCalledWith(
       expect.objectContaining({
+        tokenType: 'tenant',
         sub: 21,
         businessId: 7,
         authVersion: 3,
@@ -309,7 +320,7 @@ describe('AuthService', () => {
         deletedAt: null,
         business: {
           slug: 'barber-booking',
-          isActive: true,
+          status: BusinessStatus.ACTIVE,
           deletedAt: null,
         },
       },
@@ -345,7 +356,10 @@ describe('AuthService', () => {
         authVersion: 3,
         isActive: true,
         deletedAt: null,
-        business: { isActive: true, deletedAt: null },
+        business: {
+          status: BusinessStatus.ACTIVE,
+          deletedAt: null,
+        },
       },
     });
 

@@ -3,11 +3,17 @@ import type { ExecutionContext } from '@nestjs/common';
 
 import { CsrfGuard } from './csrf.guard';
 
-function contextFor(method: string, cookie?: string, csrfHeader?: string) {
+function contextFor(
+  method: string,
+  cookie?: string,
+  csrfHeader?: string,
+  path = '/appointments',
+) {
   return {
     switchToHttp: () => ({
       getRequest: () => ({
         method,
+        path,
         headers: {
           ...(cookie ? { cookie } : {}),
           ...(csrfHeader ? { 'x-csrf-token': csrfHeader } : {}),
@@ -44,6 +50,37 @@ describe('CsrfGuard', () => {
     expect(() =>
       guard.canActivate(
         contextFor('PATCH', 'ab_access=jwt; ab_csrf=csrf-secreto', 'otro'),
+      ),
+    ).toThrow(ForbiddenException);
+  });
+
+  it('usa el CSRF de plataforma aunque también exista una sesión tenant', () => {
+    const cookies = [
+      'ab_access=tenant-jwt',
+      'ab_csrf=tenant-csrf',
+      'ab_platform_access=platform-jwt',
+      'ab_platform_csrf=platform-csrf',
+    ].join('; ');
+
+    expect(
+      guard.canActivate(
+        contextFor(
+          'POST',
+          cookies,
+          'platform-csrf',
+          '/platform/businesses',
+        ),
+      ),
+    ).toBe(true);
+
+    expect(() =>
+      guard.canActivate(
+        contextFor(
+          'POST',
+          cookies,
+          'tenant-csrf',
+          '/platform/businesses',
+        ),
       ),
     ).toThrow(ForbiddenException);
   });

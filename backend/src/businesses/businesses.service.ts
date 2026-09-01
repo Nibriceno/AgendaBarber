@@ -5,6 +5,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateBusinessDto } from './dto/update-business.dto';
 import { UpdateSocialLinksDto } from './dto/update-social-links.dto';
+import { ACTIVE_BUSINESS_WHERE } from './business-status';
 
 @Injectable()
 export class BusinessesService {
@@ -14,7 +15,7 @@ export class BusinessesService {
     return this.prisma.business.findMany({
       where: {
         id: businessId,
-        deletedAt: null,
+        ...ACTIVE_BUSINESS_WHERE,
       },
       orderBy: {
         name: 'asc',
@@ -30,7 +31,7 @@ export class BusinessesService {
     const business = await this.prisma.business.findFirst({
       where: {
         id: businessId,
-        deletedAt: null,
+        ...ACTIVE_BUSINESS_WHERE,
       },
     });
 
@@ -51,7 +52,7 @@ export class BusinessesService {
     await this.prisma.business.updateMany({
       where: {
         id: businessId,
-        deletedAt: null,
+        ...ACTIVE_BUSINESS_WHERE,
       },
       data: updateBusinessDto,
     });
@@ -63,7 +64,7 @@ export class BusinessesService {
     const business = await this.prisma.business.findFirst({
       where: {
         id: businessId,
-        deletedAt: null,
+        ...ACTIVE_BUSINESS_WHERE,
       },
       select: {
         id: true,
@@ -91,7 +92,7 @@ export class BusinessesService {
     await this.prisma.business.updateMany({
       where: {
         id: businessId,
-        deletedAt: null,
+        ...ACTIVE_BUSINESS_WHERE,
       },
       data: updateSocialLinksDto,
     });
@@ -99,37 +100,4 @@ export class BusinessesService {
     return this.findSocialLinks(businessId);
   }
 
-  async remove(businessId: number, id: number) {
-    await this.findOne(businessId, id);
-
-    const now = new Date();
-
-    await this.prisma.$transaction([
-      this.prisma.business.updateMany({
-        where: {
-          id: businessId,
-          deletedAt: null,
-        },
-        data: {
-          isActive: false,
-          deletedAt: now,
-        },
-      }),
-      this.prisma.authSession.updateMany({
-        where: {
-          revokedAt: null,
-          user: {
-            businessId,
-          },
-        },
-        data: {
-          revokedAt: now,
-        },
-      }),
-    ]);
-
-    return {
-      message: 'Negocio desactivado correctamente',
-    };
-  }
 }

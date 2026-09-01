@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { ACTIVE_BUSINESS_WHERE } from '../businesses/business-status';
 
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -200,8 +201,7 @@ export class CategoriesService {
       await this.prisma.business.findFirst({
         where: {
           id: businessId,
-          deletedAt: null,
-          isActive: true,
+          ...ACTIVE_BUSINESS_WHERE,
         },
 
         select: {

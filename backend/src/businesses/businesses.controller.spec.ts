@@ -87,13 +87,4 @@ describe('BusinessesController', () => {
     expect(businessesService.updateSocialLinks).toHaveBeenCalledWith(7, input);
   });
 
-  it('propaga el businessId autenticado al eliminar', async () => {
-    businessesService.remove.mockResolvedValue({
-      message: 'ok',
-    });
-
-    await controller.remove(currentUser, 99);
-
-    expect(businessesService.remove).toHaveBeenCalledWith(7, 99);
-  });
 });

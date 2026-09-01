@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -94,13 +93,4 @@ export class BusinessesController {
     );
   }
 
-  @Delete(':id')
-  remove(
-    @CurrentUser()
-    currentUser: AuthUser,
-
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    return this.businessesService.remove(currentUser.businessId, id);
-  }
 }
