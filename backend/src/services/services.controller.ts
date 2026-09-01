@@ -26,16 +26,16 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/interfaces/auth-user.interface';
 
 @Controller('services')
+@UseGuards(
+  JwtAuthGuard,
+  RolesGuard,
+)
 export class ServicesController {
   constructor(
     private readonly servicesService: ServicesService,
   ) {}
 
   @Post()
-  @UseGuards(
-    JwtAuthGuard,
-    RolesGuard,
-  )
   @Roles(
     UserRole.ADMIN,
     UserRole.RECEPTIONIST,
@@ -54,25 +54,38 @@ export class ServicesController {
   }
 
   @Get()
-  findAll() {
-    return this.servicesService.findAll();
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
+  findAll(
+    @CurrentUser()
+    currentUser: AuthUser,
+  ) {
+    return this.servicesService.findAll(
+      currentUser.businessId,
+    );
   }
 
   @Get(':id')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
   findOne(
+    @CurrentUser()
+    currentUser: AuthUser,
+
     @Param('id', ParseIntPipe)
     id: number,
   ) {
     return this.servicesService.findOne(
+      currentUser.businessId,
       id,
     );
   }
 
   @Patch(':id')
-  @UseGuards(
-    JwtAuthGuard,
-    RolesGuard,
-  )
   @Roles(
     UserRole.ADMIN,
     UserRole.RECEPTIONIST,
@@ -95,10 +108,6 @@ export class ServicesController {
   }
 
   @Delete(':id')
-  @UseGuards(
-    JwtAuthGuard,
-    RolesGuard,
-  )
   @Roles(UserRole.ADMIN)
   remove(
     @CurrentUser()

@@ -15,7 +15,9 @@ function dateKeyInTimeZone(date: Date, timeZone: string): string {
     timeZone,
   }).formatToParts(date);
 
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
   return `${values.year}-${values.month}-${values.day}`;
 }
 
@@ -56,6 +58,11 @@ type AppointmentReschedulePickerProps = {
   error?: string;
   onCancel: () => void;
   onConfirm: (startAt: string) => Promise<void>;
+  eyebrow?: string;
+  title?: string;
+  description?: string;
+  cancelLabel?: string;
+  confirmLabel?: string;
 };
 
 export default function AppointmentReschedulePicker({
@@ -67,10 +74,21 @@ export default function AppointmentReschedulePicker({
   error,
   onCancel,
   onConfirm,
+  eyebrow = "Reprogramar",
+  title = "Elige una nueva fecha y hora",
+  description = "Mantendremos el profesional y los servicios de esta reserva.",
+  cancelLabel = "Mantener fecha actual",
+  confirmLabel = "Confirmar nueva hora",
 }: AppointmentReschedulePickerProps) {
-  const today = useMemo(() => dateKeyInTimeZone(new Date(), timeZone), [timeZone]);
+  const today = useMemo(
+    () => dateKeyInTimeZone(new Date(), timeZone),
+    [timeZone],
+  );
   const days = useMemo(
-    () => Array.from({ length: DAYS_TO_SHOW }, (_, index) => addUtcDays(today, index)),
+    () =>
+      Array.from({ length: DAYS_TO_SHOW }, (_, index) =>
+        addUtcDays(today, index),
+      ),
     [today],
   );
   const [selectedDate, setSelectedDate] = useState(today);
@@ -125,14 +143,10 @@ export default function AppointmentReschedulePicker({
     <section className="border-t border-amber-100 bg-amber-50/60 p-5 sm:p-6">
       <div className="max-w-3xl">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">
-          Reprogramar
+          {eyebrow}
         </p>
-        <h4 className="mt-2 text-lg font-semibold text-zinc-950">
-          Elige una nueva fecha y hora
-        </h4>
-        <p className="mt-1 text-sm leading-6 text-zinc-600">
-          Mantendremos el profesional y los servicios de esta reserva.
-        </p>
+        <h4 className="mt-2 text-lg font-semibold text-zinc-950">{title}</h4>
+        <p className="mt-1 text-sm leading-6 text-zinc-600">{description}</p>
 
         <div className="-mx-5 mt-5 overflow-x-auto px-5 pb-2 sm:-mx-6 sm:px-6">
           <div className="flex min-w-max gap-2">
@@ -154,8 +168,12 @@ export default function AppointmentReschedulePicker({
                   <span className="text-[10px] uppercase opacity-70">
                     {dateKey === today ? "Hoy" : formatted.weekday}
                   </span>
-                  <span className="mt-1 text-lg font-semibold">{formatted.day}</span>
-                  <span className="text-[10px] uppercase opacity-70">{formatted.month}</span>
+                  <span className="mt-1 text-lg font-semibold">
+                    {formatted.day}
+                  </span>
+                  <span className="text-[10px] uppercase opacity-70">
+                    {formatted.month}
+                  </span>
                 </button>
               );
             })}
@@ -168,7 +186,10 @@ export default function AppointmentReschedulePicker({
               Buscando horarios disponibles...
             </div>
           ) : availabilityError ? (
-            <p role="alert" className="rounded-2xl bg-red-50 p-4 text-sm text-red-700">
+            <p
+              role="alert"
+              className="rounded-2xl bg-red-50 p-4 text-sm text-red-700"
+            >
               {availabilityError}
             </p>
           ) : slots.length === 0 ? (
@@ -209,7 +230,7 @@ export default function AppointmentReschedulePicker({
             onClick={onCancel}
             className="min-h-11 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 disabled:opacity-50"
           >
-            Mantener fecha actual
+            {cancelLabel}
           </button>
           <button
             type="button"
@@ -217,7 +238,7 @@ export default function AppointmentReschedulePicker({
             onClick={() => selectedStartAt && void onConfirm(selectedStartAt)}
             className="min-h-11 rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
           >
-            {submitting ? "Reprogramando..." : "Confirmar nueva hora"}
+            {submitting ? "Guardando..." : confirmLabel}
           </button>
         </div>
       </div>

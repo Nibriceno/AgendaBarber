@@ -78,18 +78,16 @@ export class ServicesService {
     });
   }
 
-  async findAll() {
-    /*
-     * TEMPORAL:
-     * Tenemos una sola barbería.
-     *
-     * Cuando implementemos la API
-     * pública multi-tenant, esta ruta
-     * se reemplazará por una basada
-     * en business slug.
-     */
+  async findAll(
+    businessId: number,
+  ) {
+    await this.validateBusiness(
+      businessId,
+    );
+
     return this.prisma.service.findMany({
       where: {
+        businessId,
         deletedAt: null,
         isActive: true,
       },
@@ -110,12 +108,14 @@ export class ServicesService {
   }
 
   async findOne(
+    businessId: number,
     id: number,
   ) {
     const service =
       await this.prisma.service.findFirst({
         where: {
           id,
+          businessId,
           deletedAt: null,
           isActive: true,
         },

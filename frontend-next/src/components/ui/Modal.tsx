@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  ReactNode,
-  useEffect,
-} from "react";
+import { ReactNode, useEffect } from "react";
 
 type ModalProps = {
   open: boolean;
@@ -12,6 +9,7 @@ type ModalProps = {
   children: ReactNode;
   onClose: () => void;
   closeDisabled?: boolean;
+  size?: "default" | "large";
 };
 
 export function Modal({
@@ -21,47 +19,31 @@ export function Modal({
   children,
   onClose,
   closeDisabled = false,
+  size = "default",
 }: ModalProps) {
   useEffect(() => {
     if (!open) {
       return;
     }
 
-    const handleKeyDown = (
-      event: KeyboardEvent,
-    ) => {
-      if (
-        event.key === "Escape" &&
-        !closeDisabled
-      ) {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !closeDisabled) {
         onClose();
       }
     };
 
-    document.addEventListener(
-      "keydown",
-      handleKeyDown,
-    );
+    document.addEventListener("keydown", handleKeyDown);
 
-    const previousOverflow =
-      document.body.style.overflow;
+    const previousOverflow = document.body.style.overflow;
 
     document.body.style.overflow = "hidden";
 
     return () => {
-      document.removeEventListener(
-        "keydown",
-        handleKeyDown,
-      );
+      document.removeEventListener("keydown", handleKeyDown);
 
-      document.body.style.overflow =
-        previousOverflow;
+      document.body.style.overflow = previousOverflow;
     };
-  }, [
-    open,
-    onClose,
-    closeDisabled,
-  ]);
+  }, [open, onClose, closeDisabled]);
 
   if (!open) {
     return null;
@@ -73,11 +55,7 @@ export function Modal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"
-      aria-describedby={
-        description
-          ? "modal-description"
-          : undefined
-      }
+      aria-describedby={description ? "modal-description" : undefined}
     >
       <button
         type="button"
@@ -90,7 +68,9 @@ export function Modal({
         }}
       />
 
-      <div className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-zinc-200 bg-white shadow-xl">
+      <div
+        className={`relative z-10 max-h-[90vh] w-full overflow-y-auto rounded-2xl border border-zinc-200 bg-white shadow-xl ${size === "large" ? "max-w-4xl" : "max-w-lg"}`}
+      >
         <div className="border-b border-zinc-100 px-6 py-5">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -123,9 +103,7 @@ export function Modal({
           </div>
         </div>
 
-        <div className="p-6">
-          {children}
-        </div>
+        <div className="p-6">{children}</div>
       </div>
     </div>
   );

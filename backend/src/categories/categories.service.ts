@@ -43,9 +43,16 @@ export class CategoriesService {
     });
   }
 
-  async findAll() {
+  async findAll(
+    businessId: number,
+  ) {
+    await this.validateBusiness(
+      businessId,
+    );
+
     return this.prisma.category.findMany({
       where: {
+        businessId,
         deletedAt: null,
         isActive: true,
       },
@@ -62,12 +69,14 @@ export class CategoriesService {
   }
 
   async findOne(
+    businessId: number,
     id: number,
   ) {
     const category =
       await this.prisma.category.findFirst({
         where: {
           id,
+          businessId,
           deletedAt: null,
           isActive: true,
         },

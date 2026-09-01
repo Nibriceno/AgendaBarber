@@ -13,6 +13,8 @@ import type { AppointmentDisplayStatus } from "@/features/appointment-management
 import { getApiErrorMessage } from "@/lib/api/errors";
 
 import { getAdminAgenda } from "../api/admin-agenda.api";
+import AdminAppointmentDetailModal from "./AdminAppointmentDetailModal";
+import ManualAppointmentModal from "./ManualAppointmentModal";
 import type {
   AdminAgendaAppointment,
   AdminAgendaResponse,
@@ -57,16 +59,19 @@ function AppointmentCard({
   appointment,
   timezone,
   currency,
+  onOpen,
 }: {
   appointment: AdminAgendaAppointment;
   timezone: string;
   currency: string;
+  onOpen: () => void;
 }) {
   const status = APPOINTMENT_STATUS_CONFIG[appointment.status];
-  const customerName = `${appointment.customer.firstName} ${appointment.customer.lastName}`.trim();
+  const customerName =
+    `${appointment.customer.firstName} ${appointment.customer.lastName}`.trim();
 
   return (
-    <li className="grid gap-4 border-b border-zinc-100 px-4 py-5 last:border-b-0 md:grid-cols-[92px_minmax(180px,1.35fr)_minmax(150px,1fr)_minmax(130px,0.8fr)_110px] md:items-center md:px-5">
+    <li className="grid gap-4 border-b border-zinc-100 px-4 py-5 last:border-b-0 md:grid-cols-[92px_minmax(180px,1.35fr)_minmax(150px,1fr)_minmax(130px,0.8fr)_100px_100px] md:items-center md:px-5">
       <div className="flex items-baseline gap-2 md:block">
         <p className="text-lg font-semibold tabular-nums text-zinc-950">
           {formatAppointmentTime(appointment.startAt, timezone)}
@@ -87,7 +92,9 @@ function AppointmentCard({
           {appointment.customer.email || appointment.customer.phone}
         </p>
         {appointment.customer.email && (
-          <p className="mt-0.5 text-xs text-zinc-400">{appointment.customer.phone}</p>
+          <p className="mt-0.5 text-xs text-zinc-400">
+            {appointment.customer.phone}
+          </p>
         )}
       </div>
 
@@ -99,7 +106,9 @@ function AppointmentCard({
           <span
             aria-hidden="true"
             className="h-2 w-2 shrink-0 rounded-full"
-            style={{ backgroundColor: appointment.barber.calendarColor || "#18181b" }}
+            style={{
+              backgroundColor: appointment.barber.calendarColor || "#18181b",
+            }}
           />
           {appointment.barber.displayName}
         </p>
@@ -119,24 +128,42 @@ function AppointmentCard({
       <p className="text-sm font-semibold tabular-nums text-zinc-950 md:text-right">
         {formatAppointmentMoney(appointment.totalPrice, currency)}
       </p>
+
+      <button
+        type="button"
+        onClick={onOpen}
+        className="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-700 transition hover:border-zinc-400 hover:bg-zinc-50"
+      >
+        Ver detalle
+      </button>
     </li>
   );
 }
 
-export default function AdminAgendaView({ businessSlug }: { businessSlug: string }) {
+export default function AdminAgendaView({
+  businessSlug,
+}: {
+  businessSlug: string;
+}) {
   const initialFilters: AgendaFilters = {
     date: getBrowserDateKey(),
     status: "",
     barberId: "",
     search: "",
   };
-  const [draftFilters, setDraftFilters] = useState<AgendaFilters>(initialFilters);
-  const [appliedFilters, setAppliedFilters] = useState<AgendaFilters>(initialFilters);
+  const [draftFilters, setDraftFilters] =
+    useState<AgendaFilters>(initialFilters);
+  const [appliedFilters, setAppliedFilters] =
+    useState<AgendaFilters>(initialFilters);
   const [page, setPage] = useState(1);
   const [data, setData] = useState<AdminAgendaResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<
+    number | null
+  >(null);
 
   useEffect(() => {
     let active = true;
@@ -227,11 +254,15 @@ export default function AdminAgendaView({ businessSlug }: { businessSlug: string
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const firstItem = data && data.pagination.total > 0
-    ? (data.pagination.page - 1) * data.pagination.pageSize + 1
-    : 0;
+  const firstItem =
+    data && data.pagination.total > 0
+      ? (data.pagination.page - 1) * data.pagination.pageSize + 1
+      : 0;
   const lastItem = data
-    ? Math.min(data.pagination.page * data.pagination.pageSize, data.pagination.total)
+    ? Math.min(
+        data.pagination.page * data.pagination.pageSize,
+        data.pagination.total,
+      )
     : 0;
 
   return (
@@ -249,23 +280,38 @@ export default function AdminAgendaView({ businessSlug }: { businessSlug: string
             página carga un máximo de {PAGE_SIZE} resultados.
           </p>
         </div>
-        <Link
-          href={`/${businessSlug}/admin/dashboard`}
-          className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50"
-        >
-          Volver al dashboard
-        </Link>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            onClick={() => setManualOpen(true)}
+            className="inline-flex h-11 items-center justify-center rounded-xl bg-zinc-950 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800"
+          >
+            + Nueva reserva
+          </button>
+          <Link
+            href={`/${businessSlug}/admin/dashboard`}
+            className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50"
+          >
+            Volver al dashboard
+          </Link>
+        </div>
       </header>
 
       <Card className="p-4 sm:p-5">
-        <form onSubmit={applyFilters} className="grid gap-4 lg:grid-cols-[170px_180px_200px_minmax(220px,1fr)_auto] lg:items-end">
+        <form
+          onSubmit={applyFilters}
+          className="grid gap-4 lg:grid-cols-[170px_180px_200px_minmax(220px,1fr)_auto] lg:items-end"
+        >
           <label className="text-xs font-semibold text-zinc-600">
             Fecha
             <input
               type="date"
               value={draftFilters.date}
               onChange={(event) =>
-                setDraftFilters((current) => ({ ...current, date: event.target.value }))
+                setDraftFilters((current) => ({
+                  ...current,
+                  date: event.target.value,
+                }))
               }
               required
               className="mt-1.5 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-950 outline-none focus:border-zinc-950 focus:ring-2 focus:ring-zinc-200"
@@ -285,9 +331,13 @@ export default function AdminAgendaView({ businessSlug }: { businessSlug: string
               className="mt-1.5 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-950 outline-none focus:border-zinc-950 focus:ring-2 focus:ring-zinc-200"
             >
               <option value="">Todos</option>
-              {Object.entries(APPOINTMENT_STATUS_CONFIG).map(([value, config]) => (
-                <option key={value} value={value}>{config.label}</option>
-              ))}
+              {Object.entries(APPOINTMENT_STATUS_CONFIG).map(
+                ([value, config]) => (
+                  <option key={value} value={value}>
+                    {config.label}
+                  </option>
+                ),
+              )}
             </select>
           </label>
 
@@ -305,7 +355,9 @@ export default function AdminAgendaView({ businessSlug }: { businessSlug: string
             >
               <option value="">Todos</option>
               {data?.barbers.map((barber) => (
-                <option key={barber.id} value={barber.id}>{barber.displayName}</option>
+                <option key={barber.id} value={barber.id}>
+                  {barber.displayName}
+                </option>
               ))}
             </select>
           </label>
@@ -317,7 +369,10 @@ export default function AdminAgendaView({ businessSlug }: { businessSlug: string
               maxLength={100}
               value={draftFilters.search}
               onChange={(event) =>
-                setDraftFilters((current) => ({ ...current, search: event.target.value }))
+                setDraftFilters((current) => ({
+                  ...current,
+                  search: event.target.value,
+                }))
               }
               placeholder="Nombre, correo, teléfono o código"
               className="mt-1.5 h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-950 outline-none placeholder:text-zinc-400 focus:border-zinc-950 focus:ring-2 focus:ring-zinc-200"
@@ -349,7 +404,9 @@ export default function AdminAgendaView({ businessSlug }: { businessSlug: string
               {formatSelectedDate(appliedFilters.date)}
             </p>
             <p className="mt-1 text-xs text-zinc-500">
-              {data ? `${data.pagination.total} reserva${data.pagination.total === 1 ? "" : "s"} encontrada${data.pagination.total === 1 ? "" : "s"}` : "Cargando resultados"}
+              {data
+                ? `${data.pagination.total} reserva${data.pagination.total === 1 ? "" : "s"} encontrada${data.pagination.total === 1 ? "" : "s"}`
+                : "Cargando resultados"}
             </p>
           </div>
           <div className="grid grid-cols-3 gap-2">
@@ -381,7 +438,9 @@ export default function AdminAgendaView({ businessSlug }: { businessSlug: string
 
         {error ? (
           <div className="px-5 py-12 text-center">
-            <p role="alert" className="text-sm text-red-700">{error}</p>
+            <p role="alert" className="text-sm text-red-700">
+              {error}
+            </p>
             <button
               type="button"
               onClick={() => {
@@ -396,18 +455,33 @@ export default function AdminAgendaView({ businessSlug }: { businessSlug: string
         ) : loading && !data ? (
           <div className="space-y-1 p-4">
             {Array.from({ length: 6 }).map((_, index) => (
-              <div key={index} className="h-20 animate-pulse rounded-xl bg-zinc-100" />
+              <div
+                key={index}
+                className="h-20 animate-pulse rounded-xl bg-zinc-100"
+              />
             ))}
           </div>
         ) : data?.items.length === 0 ? (
           <div className="px-6 py-16 text-center">
-            <p className="font-semibold text-zinc-800">No hay reservas con estos filtros</p>
-            <p className="mt-2 text-sm text-zinc-500">Prueba otra fecha, estado o profesional.</p>
+            <p className="font-semibold text-zinc-800">
+              No hay reservas con estos filtros
+            </p>
+            <p className="mt-2 text-sm text-zinc-500">
+              Prueba otra fecha, estado o profesional.
+            </p>
           </div>
         ) : (
-          <div className={loading ? "opacity-55 transition" : "transition"} aria-busy={loading}>
-            <div className="hidden grid-cols-[92px_minmax(180px,1.35fr)_minmax(150px,1fr)_minmax(130px,0.8fr)_110px] gap-4 border-b border-zinc-100 bg-zinc-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 md:grid">
-              <span>Horario</span><span>Cliente</span><span>Servicio y profesional</span><span>Estado</span><span className="text-right">Total</span>
+          <div
+            className={loading ? "opacity-55 transition" : "transition"}
+            aria-busy={loading}
+          >
+            <div className="hidden grid-cols-[92px_minmax(180px,1.35fr)_minmax(150px,1fr)_minmax(130px,0.8fr)_100px_100px] gap-4 border-b border-zinc-100 bg-zinc-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 md:grid">
+              <span>Horario</span>
+              <span>Cliente</span>
+              <span>Servicio y profesional</span>
+              <span>Estado</span>
+              <span className="text-right">Total</span>
+              <span>Acción</span>
             </div>
             <ul>
               {data?.items.map((appointment) => (
@@ -416,6 +490,7 @@ export default function AdminAgendaView({ businessSlug }: { businessSlug: string
                   appointment={appointment}
                   timezone={data.timezone}
                   currency={data.currency}
+                  onOpen={() => setSelectedAppointmentId(appointment.id)}
                 />
               ))}
             </ul>
@@ -454,6 +529,30 @@ export default function AdminAgendaView({ businessSlug }: { businessSlug: string
           </nav>
         )}
       </Card>
+
+      <ManualAppointmentModal
+        open={manualOpen}
+        businessSlug={businessSlug}
+        onClose={() => setManualOpen(false)}
+        onCreated={(appointmentId) => {
+          setManualOpen(false);
+          setSelectedAppointmentId(appointmentId);
+          setLoading(true);
+          setRefreshKey((current) => current + 1);
+        }}
+      />
+
+      <AdminAppointmentDetailModal
+        appointmentId={selectedAppointmentId}
+        businessSlug={businessSlug}
+        timezone={data?.timezone ?? "America/Santiago"}
+        currency={data?.currency ?? "CLP"}
+        onClose={() => setSelectedAppointmentId(null)}
+        onChanged={() => {
+          setLoading(true);
+          setRefreshKey((current) => current + 1);
+        }}
+      />
     </div>
   );
 }

@@ -1,4 +1,8 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { AppointmentStatus, UserRole } from '@prisma/client';
 
 import { AppointmentsService } from './appointments.service';
@@ -411,5 +415,136 @@ describe('AppointmentsService status transitions', () => {
         AppointmentStatus.IN_PROGRESS,
       ),
     ).toThrow('No se puede cambiar una reserva de PENDING a IN_PROGRESS');
+  });
+});
+
+describe('AppointmentsService manual customer resolution', () => {
+  const service = new AppointmentsService({} as PrismaService);
+  const resolveManualCustomer = (
+    transaction: unknown,
+    customer: {
+      firstName: string;
+      lastName: string;
+      phone: string;
+      email?: string;
+    },
+  ) =>
+    (
+      service as unknown as {
+        resolveManualCustomerForBooking: (
+          transaction: unknown,
+          businessId: number,
+          customer: {
+            firstName: string;
+            lastName: string;
+            phone: string;
+            email?: string;
+          },
+        ) => Promise<unknown>;
+      }
+    ).resolveManualCustomerForBooking(transaction, 8, customer);
+
+  it('reutiliza la cuenta CLIENT registrada cuando coincide el teléfono', async () => {
+    const transaction = {
+      user: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 21,
+          role: UserRole.CLIENT,
+          firstName: 'Ana',
+          lastName: 'Pérez',
+          email: 'ana@example.com',
+          isRegistered: true,
+          isActive: true,
+        }),
+        update: jest.fn(),
+        create: jest.fn(),
+      },
+    };
+
+    await expect(
+      resolveManualCustomer(transaction, {
+        firstName: 'Ana',
+        lastName: 'Pérez',
+        phone: '+56912345678',
+        email: 'ana@example.com',
+      }),
+    ).resolves.toEqual({
+      id: 21,
+      firstName: 'Ana',
+      email: 'ana@example.com',
+      isRegistered: true,
+    });
+    expect(transaction.user.update).not.toHaveBeenCalled();
+    expect(transaction.user.create).not.toHaveBeenCalled();
+  });
+
+  it('actualiza el contacto invitado existente sin crear un duplicado', async () => {
+    const transaction = {
+      user: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValueOnce({
+            id: 31,
+            role: UserRole.CLIENT,
+            firstName: 'Cliente',
+            lastName: 'Invitado',
+            email: null,
+            isRegistered: false,
+            isActive: true,
+          })
+          .mockResolvedValueOnce(null),
+        update: jest.fn().mockResolvedValue({
+          id: 31,
+          firstName: 'Carla',
+          email: 'carla@example.com',
+          isRegistered: false,
+        }),
+        create: jest.fn(),
+      },
+    };
+
+    await resolveManualCustomer(transaction, {
+      firstName: 'Carla',
+      lastName: 'Soto',
+      phone: '+56987654321',
+      email: 'carla@example.com',
+    });
+
+    expect(transaction.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 31 },
+        data: expect.objectContaining({
+          firstName: 'Carla',
+          lastName: 'Soto',
+          email: 'carla@example.com',
+        }),
+      }),
+    );
+    expect(transaction.user.create).not.toHaveBeenCalled();
+  });
+
+  it('rechaza un correo que no coincide con la cuenta del teléfono', async () => {
+    const transaction = {
+      user: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 21,
+          role: UserRole.CLIENT,
+          firstName: 'Ana',
+          lastName: 'Pérez',
+          email: 'ana@example.com',
+          isRegistered: true,
+          isActive: true,
+        }),
+      },
+    };
+
+    await expect(
+      resolveManualCustomer(transaction, {
+        firstName: 'Otra',
+        lastName: 'Persona',
+        phone: '+56912345678',
+        email: 'otra@example.com',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });

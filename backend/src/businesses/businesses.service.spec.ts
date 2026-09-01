@@ -3,12 +3,23 @@ import { NotFoundException } from '@nestjs/common';
 import { BusinessesService } from './businesses.service';
 
 describe('BusinessesService tenant isolation', () => {
+  const businessUpdateMany = jest.fn<
+    (args: unknown) => Promise<unknown>
+  >();
+  const authSessionUpdateMany = jest.fn<
+    (args: unknown) => Promise<unknown>
+  >();
+
   const prisma = {
     business: {
       findMany: jest.fn(),
       findFirst: jest.fn(),
-      updateMany: jest.fn(),
+      updateMany: businessUpdateMany,
     },
+    authSession: {
+      updateMany: authSessionUpdateMany,
+    },
+    $transaction: jest.fn(),
   };
 
   const service = new BusinessesService(prisma as never);
@@ -128,5 +139,81 @@ describe('BusinessesService tenant isolation', () => {
     );
 
     expect(prisma.business.updateMany).not.toHaveBeenCalled();
+    expect(prisma.authSession.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('revoca todas las sesiones al desactivar el negocio autenticado', async () => {
+    let receivedBusinessUpdate: unknown;
+    let receivedSessionUpdate: unknown;
+
+    prisma.business.findFirst.mockResolvedValue({
+      id: 7,
+      name: 'AgendaBarber',
+    });
+    prisma.business.updateMany.mockImplementation((input) => {
+      receivedBusinessUpdate = input;
+      return Promise.resolve({ count: 1 });
+    });
+    prisma.authSession.updateMany.mockImplementation((input) => {
+      receivedSessionUpdate = input;
+      return Promise.resolve({ count: 4 });
+    });
+    prisma.$transaction.mockResolvedValue([
+      { count: 1 },
+      { count: 4 },
+    ]);
+
+    await expect(service.remove(7, 7)).resolves.toEqual({
+      message: 'Negocio desactivado correctamente',
+    });
+
+    const businessUpdate = receivedBusinessUpdate as
+      | {
+          where: Record<string, unknown>;
+          data: {
+            isActive: boolean;
+            deletedAt: Date;
+          };
+        }
+      | undefined;
+    const sessionUpdate = receivedSessionUpdate as
+      | {
+          where: Record<string, unknown>;
+          data: {
+            revokedAt: Date;
+          };
+        }
+      | undefined;
+
+    expect(businessUpdate).toBeDefined();
+    expect(sessionUpdate).toBeDefined();
+
+    if (!businessUpdate || !sessionUpdate) {
+      throw new Error('No se ejecutaron las actualizaciones esperadas.');
+    }
+
+    expect(businessUpdate).toMatchObject({
+      where: {
+        id: 7,
+        deletedAt: null,
+      },
+      data: {
+        isActive: false,
+      },
+    });
+    expect(businessUpdate.data.deletedAt).toBeInstanceOf(Date);
+    expect(sessionUpdate).toMatchObject({
+      where: {
+        revokedAt: null,
+        user: {
+          businessId: 7,
+        },
+      },
+    });
+    expect(sessionUpdate.data.revokedAt).toBe(businessUpdate.data.deletedAt);
+    expect(prisma.$transaction).toHaveBeenCalledWith([
+      expect.any(Promise),
+      expect.any(Promise),
+    ]);
   });
 });

@@ -63,6 +63,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
         deletedAt: null,
 
+        business: {
+          isActive: true,
+          deletedAt: null,
+        },
+
         authSessions: {
           some: {
             id: payload.sessionId,

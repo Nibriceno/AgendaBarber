@@ -6,7 +6,14 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { AppointmentStatus, DayOfWeek, Prisma, UserRole } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
+import {
+  AppointmentSource,
+  AppointmentStatus,
+  DayOfWeek,
+  Prisma,
+  UserRole,
+} from '@prisma/client';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
@@ -19,6 +26,10 @@ import { BarberUpdateStatusDto } from './dto/barber-update-status.dto';
 import { BarberAppointmentsQueryDto } from './dto/barber-appointments-query.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
 import { AdminAppointmentsQueryDto } from './dto/admin-appointments-query.dto';
+import {
+  CreateManualAppointmentDto,
+  ManualAppointmentSource,
+} from './dto/create-manual-appointment.dto';
 import {
   addDaysToDateKey,
   getLocalDateKey,
@@ -49,6 +60,7 @@ export class AppointmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService?: EmailService,
+    private readonly configService?: ConfigService,
   ) {}
 
   async findOneAuthorized(id: number, currentUser: AuthUser) {
@@ -308,6 +320,88 @@ export class AppointmentsService {
     return appointment;
   }
 
+  async createManual(currentUser: AuthUser, dto: CreateManualAppointmentDto) {
+    if (
+      currentUser.role !== UserRole.ADMIN &&
+      currentUser.role !== UserRole.RECEPTIONIST
+    ) {
+      throw new ForbiddenException(
+        'No tienes permiso para crear reservas manuales.',
+      );
+    }
+
+    const customerInput = {
+      firstName: dto.firstName.trim(),
+      lastName: dto.lastName.trim(),
+      phone: dto.phone.trim(),
+      email: dto.email?.trim().toLowerCase() || undefined,
+    };
+
+    const managementToken = randomBytes(32).toString('base64url');
+    const managementTokenHash = this.hashManagementToken(managementToken);
+
+    try {
+      const result = await this.runSerializableTransaction(
+        async (transaction) => {
+          await this.validateBusiness(currentUser.businessId, transaction);
+
+          const customer = await this.resolveManualCustomerForBooking(
+            transaction,
+            currentUser.businessId,
+            customerInput,
+          );
+
+          const appointment =
+            await this.createAppointmentForCustomerInTransaction({
+              transaction,
+              businessId: currentUser.businessId,
+              customerId: customer.id,
+              historyActorId: currentUser.id,
+              historyComment:
+                dto.source === ManualAppointmentSource.PHONE
+                  ? 'Reserva creada por teléfono'
+                  : 'Reserva creada presencialmente',
+              canApplyDiscount: true,
+              createAppointmentDto: {
+                barberId: dto.barberId,
+                serviceIds: dto.serviceIds,
+                startAt: dto.startAt,
+                discountAmount: dto.discountAmount,
+                customerNotes: dto.customerNotes?.trim() || undefined,
+                internalNotes: dto.internalNotes?.trim() || undefined,
+              },
+              source: dto.source as AppointmentSource,
+              ...(!customer.isRegistered && { managementTokenHash }),
+            });
+
+          return { appointment, customer };
+        },
+      );
+
+      if (!result.customer.isRegistered && result.customer.email) {
+        this.notifyManualGuestBooking(
+          result.appointment,
+          result.customer,
+          currentUser.businessSlug,
+          managementToken,
+        );
+      }
+
+      return result.appointment;
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'Ya existe un cliente con ese teléfono o correo.',
+        );
+      }
+
+      throw error;
+    }
+  }
+
   private async createAppointmentForCustomer({
     businessId,
     customerId,
@@ -316,6 +410,7 @@ export class AppointmentsService {
     canApplyDiscount,
     createAppointmentDto,
     managementTokenHash,
+    source,
   }: {
     businessId: number;
     customerId: number;
@@ -324,6 +419,7 @@ export class AppointmentsService {
     canApplyDiscount: boolean;
     createAppointmentDto: CreateAppointmentDto;
     managementTokenHash?: string;
+    source?: AppointmentSource;
   }) {
     /*
      * Toda la creación se ejecuta dentro de una transacción
@@ -341,6 +437,7 @@ export class AppointmentsService {
         canApplyDiscount,
         createAppointmentDto,
         managementTokenHash,
+        source,
       }),
     );
   }
@@ -354,6 +451,7 @@ export class AppointmentsService {
     canApplyDiscount,
     createAppointmentDto,
     managementTokenHash,
+    source,
   }: {
     transaction: Prisma.TransactionClient;
     businessId: number;
@@ -363,6 +461,7 @@ export class AppointmentsService {
     canApplyDiscount: boolean;
     createAppointmentDto: CreateAppointmentDto;
     managementTokenHash?: string;
+    source?: AppointmentSource;
   }) {
     const business = await this.validateBusiness(businessId, transaction);
 
@@ -527,6 +626,7 @@ export class AppointmentsService {
         startAt,
         endAt,
         status: AppointmentStatus.PENDING,
+        source: source ?? AppointmentSource.ONLINE,
         totalDurationMinutes,
         subtotal,
         discountAmount,
@@ -681,6 +781,7 @@ export class AppointmentsService {
           startAt: true,
           endAt: true,
           status: true,
+          source: true,
           totalPrice: true,
           totalDurationMinutes: true,
           confirmationCode: true,
@@ -738,6 +839,7 @@ export class AppointmentsService {
         startAt: appointment.startAt.toISOString(),
         endAt: appointment.endAt.toISOString(),
         status: appointment.status,
+        source: appointment.source,
         totalPrice: appointment.totalPrice.toString(),
         totalDurationMinutes: appointment.totalDurationMinutes,
         confirmationCode: appointment.confirmationCode,
@@ -2664,5 +2766,184 @@ export class AppointmentsService {
         id: true,
       },
     });
+  }
+
+  private async resolveManualCustomerForBooking(
+    transaction: Prisma.TransactionClient,
+    businessId: number,
+    customer: {
+      firstName: string;
+      lastName: string;
+      phone: string;
+      email?: string;
+    },
+  ) {
+    const existingByPhone = await transaction.user.findFirst({
+      where: {
+        businessId,
+        phone: customer.phone,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        role: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        isRegistered: true,
+        isActive: true,
+      },
+    });
+
+    if (existingByPhone) {
+      if (
+        existingByPhone.role !== UserRole.CLIENT ||
+        !existingByPhone.isActive
+      ) {
+        throw new ConflictException(
+          'El teléfono pertenece a una cuenta que no puede usarse como cliente.',
+        );
+      }
+
+      if (
+        customer.email &&
+        existingByPhone.email &&
+        existingByPhone.email.toLowerCase() !== customer.email
+      ) {
+        throw new ConflictException(
+          'El correo no coincide con el cliente asociado a ese teléfono.',
+        );
+      }
+
+      if (customer.email && !existingByPhone.email) {
+        const emailOwner = await transaction.user.findFirst({
+          where: {
+            businessId,
+            email: customer.email,
+            deletedAt: null,
+            id: { not: existingByPhone.id },
+          },
+          select: { id: true },
+        });
+
+        if (emailOwner) {
+          throw new ConflictException('El correo ya pertenece a otro cliente.');
+        }
+      }
+
+      if (!existingByPhone.isRegistered) {
+        return transaction.user.update({
+          where: { id: existingByPhone.id },
+          data: {
+            firstName: customer.firstName,
+            lastName: customer.lastName,
+            ...(customer.email && !existingByPhone.email
+              ? { email: customer.email }
+              : {}),
+          },
+          select: {
+            id: true,
+            firstName: true,
+            email: true,
+            isRegistered: true,
+          },
+        });
+      }
+
+      return {
+        id: existingByPhone.id,
+        firstName: existingByPhone.firstName,
+        email: existingByPhone.email,
+        isRegistered: existingByPhone.isRegistered,
+      };
+    }
+
+    if (customer.email) {
+      const existingByEmail = await transaction.user.findFirst({
+        where: {
+          businessId,
+          email: customer.email,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+
+      if (existingByEmail) {
+        throw new ConflictException(
+          'El correo ya pertenece a un cliente con otro teléfono.',
+        );
+      }
+    }
+
+    return transaction.user.create({
+      data: {
+        businessId,
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        phone: customer.phone,
+        email: customer.email ?? null,
+        role: UserRole.CLIENT,
+        isRegistered: false,
+        isActive: true,
+        emailVerified: false,
+        phoneVerified: false,
+      },
+      select: {
+        id: true,
+        firstName: true,
+        email: true,
+        isRegistered: true,
+      },
+    });
+  }
+
+  private notifyManualGuestBooking(
+    appointment: {
+      id: number;
+      startAt: Date;
+      confirmationCode: string;
+      business: { name: string; timezone: string };
+      barber: { displayName: string };
+    },
+    customer: {
+      firstName: string;
+      email: string | null;
+    },
+    businessSlug: string,
+    managementToken: string,
+  ): void {
+    if (!customer.email || !this.emailService || !this.configService) {
+      return;
+    }
+
+    const publicAppUrl = this.configService
+      .getOrThrow<string>('PUBLIC_APP_URL')
+      .replace(/\/$/, '');
+    const managementUrl = `${publicAppUrl}/${encodeURIComponent(
+      businessSlug,
+    )}/booking/manage/${encodeURIComponent(
+      appointment.confirmationCode,
+    )}#token=${encodeURIComponent(managementToken)}`;
+    const appointmentDate = new Intl.DateTimeFormat('es-CL', {
+      dateStyle: 'full',
+      timeStyle: 'short',
+      timeZone: appointment.business.timezone,
+    }).format(appointment.startAt);
+
+    void this.emailService
+      .sendGuestBookingConfirmation({
+        to: customer.email,
+        firstName: customer.firstName,
+        businessName: appointment.business.name,
+        appointmentDate,
+        barberName: appointment.barber.displayName,
+        managementUrl,
+      })
+      .catch((error: unknown) => {
+        this.logger.error(
+          `No fue posible enviar la confirmación de la reserva manual ${appointment.id}.`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      });
   }
 }

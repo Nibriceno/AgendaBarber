@@ -53,10 +53,6 @@ import { CsrfGuard } from './auth/guards/csrf.guard';
         validateEnvironment,
     }),
 
-        UsersModule,
-        StaffModule,
-        AppointmentsModule,
-
     /*
      * Rate limiting global.
      *
@@ -83,6 +79,7 @@ import { CsrfGuard } from './auth/guards/csrf.guard';
     SchedulesModule,
     ScheduleExceptionsModule,
     UsersModule,
+    StaffModule,
     AppointmentsModule,
     AvailabilityModule,
     AuthModule,

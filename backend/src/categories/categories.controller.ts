@@ -26,6 +26,10 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/interfaces/auth-user.interface';
 
 @Controller('categories')
+@UseGuards(
+  JwtAuthGuard,
+  RolesGuard,
+)
 export class CategoriesController {
   constructor(
     private readonly categoriesService:
@@ -33,10 +37,6 @@ export class CategoriesController {
   ) {}
 
   @Post()
-  @UseGuards(
-    JwtAuthGuard,
-    RolesGuard,
-  )
   @Roles(
     UserRole.ADMIN,
     UserRole.RECEPTIONIST,
@@ -55,25 +55,38 @@ export class CategoriesController {
   }
 
   @Get()
-  findAll() {
-    return this.categoriesService.findAll();
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
+  findAll(
+    @CurrentUser()
+    currentUser: AuthUser,
+  ) {
+    return this.categoriesService.findAll(
+      currentUser.businessId,
+    );
   }
 
   @Get(':id')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.RECEPTIONIST,
+  )
   findOne(
+    @CurrentUser()
+    currentUser: AuthUser,
+
     @Param('id', ParseIntPipe)
     id: number,
   ) {
     return this.categoriesService.findOne(
+      currentUser.businessId,
       id,
     );
   }
 
   @Patch(':id')
-  @UseGuards(
-    JwtAuthGuard,
-    RolesGuard,
-  )
   @Roles(
     UserRole.ADMIN,
     UserRole.RECEPTIONIST,
@@ -96,10 +109,6 @@ export class CategoriesController {
   }
 
   @Delete(':id')
-  @UseGuards(
-    JwtAuthGuard,
-    RolesGuard,
-  )
   @Roles(UserRole.ADMIN)
   remove(
     @CurrentUser()

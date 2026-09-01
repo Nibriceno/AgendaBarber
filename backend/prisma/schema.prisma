@@ -23,6 +23,12 @@ enum AppointmentStatus {
   NO_SHOW
 }
 
+enum AppointmentSource {
+  ONLINE
+  PHONE
+  IN_PERSON
+}
+
 enum DayOfWeek {
   MONDAY
   TUESDAY
@@ -263,6 +269,7 @@ model Appointment {
   endAt   DateTime
 
   status AppointmentStatus @default(PENDING)
+  source AppointmentSource @default(ONLINE)
 
   totalDurationMinutes Int
   subtotal             Decimal @db.Decimal(12, 2)

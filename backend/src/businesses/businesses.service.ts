@@ -1,5 +1,4 @@
 import {
-  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -48,22 +47,6 @@ export class BusinessesService {
     updateBusinessDto: UpdateBusinessDto,
   ) {
     await this.findOne(businessId, id);
-
-    if (updateBusinessDto.slug) {
-      const duplicatedBusiness = await this.prisma.business.findFirst({
-        where: {
-          id: {
-            not: id,
-          },
-          slug: updateBusinessDto.slug,
-          deletedAt: null,
-        },
-      });
-
-      if (duplicatedBusiness) {
-        throw new ConflictException('A business with this slug already exists');
-      }
-    }
 
     await this.prisma.business.updateMany({
       where: {
@@ -119,16 +102,31 @@ export class BusinessesService {
   async remove(businessId: number, id: number) {
     await this.findOne(businessId, id);
 
-    await this.prisma.business.updateMany({
-      where: {
-        id: businessId,
-        deletedAt: null,
-      },
-      data: {
-        isActive: false,
-        deletedAt: new Date(),
-      },
-    });
+    const now = new Date();
+
+    await this.prisma.$transaction([
+      this.prisma.business.updateMany({
+        where: {
+          id: businessId,
+          deletedAt: null,
+        },
+        data: {
+          isActive: false,
+          deletedAt: now,
+        },
+      }),
+      this.prisma.authSession.updateMany({
+        where: {
+          revokedAt: null,
+          user: {
+            businessId,
+          },
+        },
+        data: {
+          revokedAt: now,
+        },
+      }),
+    ]);
 
     return {
       message: 'Negocio desactivado correctamente',
