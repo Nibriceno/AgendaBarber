@@ -7,6 +7,8 @@ import { usePathname } from "next/navigation";
 import { SocialIcon } from "@/components/icons/SocialIcon";
 import {
   BUSINESS_SOCIAL_LINKS_UPDATED_EVENT,
+  PLATFORM_BRAND_INITIALS,
+  PLATFORM_BRAND_NAME,
   SOCIAL_NETWORKS,
 } from "@/config/site";
 import { getPublicBusiness } from "@/features/public-booking/api/public-booking.api";
@@ -21,8 +23,11 @@ export default function SiteFooter() {
 
   const businessSlug = useMemo(() => {
     const firstSegment = pathname.split("/").filter(Boolean)[0];
+    const platformRoutes = new Set(["terms", "super-admin", "mi-cuenta"]);
 
-    return firstSegment && firstSegment !== "terms" ? firstSegment : null;
+    return firstSegment && !platformRoutes.has(firstSegment)
+      ? firstSegment
+      : null;
   }, [pathname]);
 
   useEffect(() => {
@@ -62,7 +67,7 @@ export default function SiteFooter() {
 
   const currentBusiness =
     footerBusiness?.slug === businessSlug ? footerBusiness : null;
-  const businessName = currentBusiness?.name ?? "AgendaBarber";
+  const businessName = currentBusiness?.name ?? PLATFORM_BRAND_NAME;
   const homeHref = businessSlug ? `/${businessSlug}` : "/";
   const configuredNetworks = SOCIAL_NETWORKS.flatMap((network) => {
     const href = currentBusiness?.socialLinks?.[network.key];
@@ -83,7 +88,7 @@ export default function SiteFooter() {
               className="inline-flex items-center gap-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50"
             >
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-[11px] font-bold text-zinc-950">
-                AB
+                {PLATFORM_BRAND_INITIALS}
               </span>
 
               <span>

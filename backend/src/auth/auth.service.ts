@@ -45,6 +45,7 @@ type SessionResponse = {
     id: number;
     businessId: number;
     businessSlug: string;
+    customerIdentityId: string | null;
     firstName: string;
     lastName: string;
     phone: string;
@@ -65,6 +66,7 @@ type MessageResponse = {
 type SessionUserData = {
   id: number;
   businessId: number;
+  customerIdentityId: string | null;
   firstName: string;
   lastName: string;
   phone: string;
@@ -122,7 +124,7 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales incorrectas');
     }
 
-    const user = await this.prisma.user.findFirst({
+    const tenantUser = await this.prisma.user.findFirst({
       where: {
         businessId: business.id,
         email: normalizedEmail,
@@ -149,19 +151,63 @@ export class AuthService {
         passwordHash: true,
         emailVerified: true,
         authVersion: true,
+        customerIdentityId: true,
       },
     });
 
-    if (!user || !user.passwordHash) {
-      throw new UnauthorizedException('Credenciales incorrectas');
+    let user = tenantUser;
+    let sessionBusinessSlug = business.slug;
+
+    if (
+      !user?.passwordHash ||
+      !(await bcrypt.compare(loginDto.password, user.passwordHash))
+    ) {
+      const globalClientCandidates = await this.prisma.user.findMany({
+        where: {
+          email: normalizedEmail,
+          role: UserRole.CLIENT,
+          customerIdentityId: { not: null },
+          isActive: true,
+          deletedAt: null,
+          isRegistered: true,
+          passwordHash: { not: null },
+        },
+        select: {
+          id: true,
+          businessId: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          email: true,
+          role: true,
+          passwordHash: true,
+          emailVerified: true,
+          authVersion: true,
+          customerIdentityId: true,
+          business: {
+            select: {
+              slug: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      user = null;
+
+      for (const candidate of globalClientCandidates) {
+        if (
+          candidate.passwordHash &&
+          (await bcrypt.compare(loginDto.password, candidate.passwordHash))
+        ) {
+          user = candidate;
+          sessionBusinessSlug = candidate.business.slug;
+          break;
+        }
+      }
     }
 
-    const passwordIsValid = await bcrypt.compare(
-      loginDto.password,
-      user.passwordHash,
-    );
-
-    if (!passwordIsValid) {
+    if (!user?.passwordHash) {
       throw new UnauthorizedException('Credenciales incorrectas');
     }
 
@@ -171,7 +217,7 @@ export class AuthService {
       );
     }
 
-    return this.createSession(user, business.slug);
+    return this.createSession(user, sessionBusinessSlug);
   }
 
   async refreshSession(refreshToken: string): Promise<SessionResponse> {
@@ -201,6 +247,7 @@ export class AuthService {
             email: true,
             role: true,
             authVersion: true,
+            customerIdentityId: true,
             isActive: true,
             deletedAt: true,
             business: {
@@ -223,7 +270,8 @@ export class AuthService {
       session.authVersion === session.user.authVersion &&
       session.user.isActive &&
       !session.user.deletedAt &&
-      isBusinessOperational(session.user.business);
+      (session.user.role === UserRole.CLIENT ||
+        isBusinessOperational(session.user.business));
 
     if (!sessionIsUsable) {
       throw new UnauthorizedException('Sesión inválida o vencida.');
@@ -332,32 +380,41 @@ export class AuthService {
       throw new BadRequestException('No es posible completar el registro.');
     }
 
-    /*
-     * Email y teléfono se verifican
-     * únicamente dentro del tenant actual.
-     */
-    const existingUser = await this.prisma.user.findFirst({
+    const existingIdentity = await this.prisma.customerIdentity.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true },
+    });
+
+    if (existingIdentity) {
+      throw new ConflictException('Ya existe una cuenta con esos datos.');
+    }
+
+    const existingUsers = await this.prisma.user.findMany({
       where: {
         businessId: business.id,
-
-        OR: [
-          {
-            email: normalizedEmail,
-          },
-          {
-            phone: normalizedPhone,
-          },
-        ],
-
+        OR: [{ email: normalizedEmail }, { phone: normalizedPhone }],
         deletedAt: null,
       },
-
       select: {
         id: true,
+        role: true,
+        email: true,
+        phone: true,
+        isRegistered: true,
+        customerIdentityId: true,
       },
     });
 
-    if (existingUser) {
+    if (
+      existingUsers.length > 1 ||
+      existingUsers.some(
+        (user) =>
+          user.role !== UserRole.CLIENT ||
+          user.isRegistered ||
+          user.customerIdentityId !== null ||
+          (user.email !== null && user.email !== normalizedEmail),
+      )
+    ) {
       throw new ConflictException('Ya existe una cuenta con esos datos.');
     }
 
@@ -368,43 +425,56 @@ export class AuthService {
     const firstName = registerDto.firstName.trim();
 
     try {
-      const user = await this.prisma.user.create({
-        data: {
-          businessId: business.id,
+      const user = await this.prisma.$transaction(async (transaction) => {
+        const identity = await transaction.customerIdentity.create({
+          data: {
+            email: normalizedEmail,
+            phone: normalizedPhone,
+          },
+          select: { id: true },
+        });
 
-          firstName: firstName,
-
+        const userData = {
+          firstName,
           lastName: registerDto.lastName.trim(),
-
           phone: normalizedPhone,
-
           email: normalizedEmail,
-
           passwordHash,
-
-          /*
-           * Registro público nunca puede
-           * crear ADMIN, BARBER ni
-           * RECEPTIONIST.
-           */
           role: UserRole.CLIENT,
-
           isRegistered: true,
           isActive: true,
           emailVerified: false,
-
+          customerIdentityId: identity.id,
           emailVerificationTokenHash: verification.hash,
-
           emailVerificationExpiresAt: verification.expiresAt,
-
           emailVerificationSentAt: new Date(),
-        },
+        } as const;
 
-        select: {
-          id: true,
-          firstName: true,
-          email: true,
-        },
+        const existingGuest = existingUsers[0];
+
+        if (existingGuest) {
+          return transaction.user.update({
+            where: { id: existingGuest.id },
+            data: userData,
+            select: {
+              id: true,
+              firstName: true,
+              email: true,
+            },
+          });
+        }
+
+        return transaction.user.create({
+          data: {
+            businessId: business.id,
+            ...userData,
+          },
+          select: {
+            id: true,
+            firstName: true,
+            email: true,
+          },
+        });
       });
 
       let emailSent = true;
@@ -491,6 +561,8 @@ export class AuthService {
 
       select: {
         id: true,
+        email: true,
+        customerIdentityId: true,
         emailVerificationExpiresAt: true,
       },
     });
@@ -521,22 +593,41 @@ export class AuthService {
       );
     }
 
-    const result = await this.prisma.user.updateMany({
-      where: {
-        id: user.id,
-        emailVerified: false,
-        emailVerificationTokenHash: tokenHash,
-        emailVerificationExpiresAt: {
-          gt: now,
+    const result = await this.prisma.$transaction(async (transaction) => {
+      const verified = await transaction.user.updateMany({
+        where: {
+          id: user.id,
+          emailVerified: false,
+          emailVerificationTokenHash: tokenHash,
+          emailVerificationExpiresAt: { gt: now },
         },
-      },
+        data: {
+          emailVerified: true,
+          emailVerificationTokenHash: null,
+          emailVerificationExpiresAt: null,
+          emailVerificationSentAt: null,
+        },
+      });
 
-      data: {
-        emailVerified: true,
-        emailVerificationTokenHash: null,
-        emailVerificationExpiresAt: null,
-        emailVerificationSentAt: null,
-      },
+      if (verified.count === 1 && user.email && user.customerIdentityId) {
+        await transaction.user.updateMany({
+          where: {
+            id: { not: user.id },
+            role: UserRole.CLIENT,
+            email: {
+              equals: user.email,
+              mode: 'insensitive',
+            },
+            customerIdentityId: null,
+            deletedAt: null,
+          },
+          data: {
+            customerIdentityId: user.customerIdentityId,
+          },
+        });
+      }
+
+      return verified;
     });
 
     if (result.count !== 1) {
@@ -670,7 +761,7 @@ export class AuthService {
         'Si existe una cuenta asociada a ese correo, enviaremos un enlace para restablecer la contraseña.',
     };
 
-    const user = await this.prisma.user.findFirst({
+    let user = await this.prisma.user.findFirst({
       where: {
         email: normalizedEmail,
         isRegistered: true,
@@ -694,6 +785,33 @@ export class AuthService {
         },
       },
     });
+
+    if (!user) {
+      user = await this.prisma.user.findFirst({
+        where: {
+          email: normalizedEmail,
+          role: UserRole.CLIENT,
+          customerIdentityId: { not: null },
+          emailVerified: true,
+          isRegistered: true,
+          isActive: true,
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          firstName: true,
+          email: true,
+          passwordResetSentAt: true,
+          business: {
+            select: {
+              name: true,
+              slug: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+    }
 
     if (!user?.email) {
       return genericResponse;
@@ -788,6 +906,8 @@ export class AuthService {
       },
       select: {
         id: true,
+        role: true,
+        customerIdentityId: true,
         passwordHash: true,
         passwordResetExpiresAt: true,
       },
@@ -832,23 +952,44 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(resetPasswordDto.password, 12);
 
-    const result = await this.prisma.user.updateMany({
-      where: {
-        id: user.id,
-        passwordResetTokenHash: tokenHash,
-        passwordResetExpiresAt: {
-          gt: now,
+    const result = await this.prisma.$transaction(async (transaction) => {
+      const reset = await transaction.user.updateMany({
+        where: {
+          id: user.id,
+          passwordResetTokenHash: tokenHash,
+          passwordResetExpiresAt: { gt: now },
         },
-      },
-      data: {
-        passwordHash,
-        passwordResetTokenHash: null,
-        passwordResetExpiresAt: null,
-        passwordResetSentAt: null,
-        authVersion: {
-          increment: 1,
+        data: {
+          passwordHash,
+          passwordResetTokenHash: null,
+          passwordResetExpiresAt: null,
+          passwordResetSentAt: null,
+          authVersion: { increment: 1 },
         },
-      },
+      });
+
+      if (
+        reset.count === 1 &&
+        user.role === UserRole.CLIENT &&
+        user.customerIdentityId
+      ) {
+        await transaction.user.updateMany({
+          where: {
+            id: { not: user.id },
+            customerIdentityId: user.customerIdentityId,
+            role: UserRole.CLIENT,
+            isRegistered: true,
+            passwordHash: { not: null },
+            deletedAt: null,
+          },
+          data: {
+            passwordHash,
+            authVersion: { increment: 1 },
+          },
+        });
+      }
+
+      return reset;
     });
 
     if (result.count !== 1) {
@@ -900,6 +1041,7 @@ export class AuthService {
       sub: user.id,
       businessId: user.businessId,
       role: user.role,
+      customerIdentityId: user.customerIdentityId,
       authVersion: user.authVersion,
       sessionId,
     });
@@ -915,6 +1057,7 @@ export class AuthService {
       phone: user.phone,
       email: user.email,
       role: user.role,
+      customerIdentityId: user.customerIdentityId,
     };
   }
 
@@ -954,7 +1097,8 @@ export class AuthService {
   }
 
   private getRefreshTokenTtlMs(): number {
-    const days = this.configService.get<number>('REFRESH_TOKEN_EXPIRES_DAYS') ?? 14;
+    const days =
+      this.configService.get<number>('REFRESH_TOKEN_EXPIRES_DAYS') ?? 14;
 
     return days * 24 * 60 * 60 * 1000;
   }

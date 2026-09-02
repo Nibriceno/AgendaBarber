@@ -104,7 +104,7 @@ export default function LoginForm() {
     router.replace(
       getDefaultRouteForRole(
         user.role,
-        user.businessSlug,
+        user.role === "CLIENT" ? businessSlug : user.businessSlug,
       ),
     );
   }, [
@@ -181,7 +181,9 @@ export default function LoginForm() {
         router.replace(
           getDefaultRouteForRole(
             authenticatedUser.role,
-            authenticatedUser.businessSlug,
+            authenticatedUser.role === "CLIENT"
+              ? businessSlug
+              : authenticatedUser.businessSlug,
           ),
         );
       } catch (error) {

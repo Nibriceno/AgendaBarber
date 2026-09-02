@@ -2,6 +2,7 @@ import type {
   ReactNode,
 } from "react";
 
+import { PLATFORM_BRAND_NAME } from "@/config/site";
 import PublicHeader from "@/features/public-booking/components/PublicHeader";
 
 type PublicAuthPageLayoutProps = {
@@ -16,7 +17,7 @@ type PublicAuthPageLayoutProps = {
 export default function PublicAuthPageLayout({
   businessName,
   businessSlug,
-  eyebrow = "AgendaBarber",
+  eyebrow = PLATFORM_BRAND_NAME,
   title,
   description,
   children,

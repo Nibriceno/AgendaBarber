@@ -14,11 +14,12 @@ import type {
 } from "../types/client-account.types";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import AppointmentReschedulePicker from "@/features/appointment-management/components/AppointmentReschedulePicker";
+import { useAuth } from "@/features/auth/context/AuthContext";
 
 type BookingFilter = "upcoming" | "history";
 
 type ClientBookingsViewProps = {
-  businessSlug: string;
+  businessSlug?: string;
 };
 
 const STATUS_PRESENTATION: Record<
@@ -93,6 +94,8 @@ function formatPrice(appointment: ClientAppointment): string {
 export default function ClientBookingsView({
   businessSlug,
 }: ClientBookingsViewProps) {
+  const { user } = useAuth();
+  const defaultBusinessSlug = businessSlug ?? user?.businessSlug ?? "";
   const [appointments, setAppointments] = useState<ClientAppointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -311,7 +314,7 @@ export default function ClientBookingsView({
         </div>
 
         <Link
-          href={`/${businessSlug}`}
+          href={`/${defaultBusinessSlug}`}
           className="inline-flex min-h-11 items-center justify-center rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white transition hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-400"
         >
           Reservar una hora
@@ -402,7 +405,7 @@ export default function ClientBookingsView({
           </p>
           {filter === "upcoming" && (
             <Link
-              href={`/${businessSlug}`}
+              href={`/${defaultBusinessSlug}`}
               className="mt-6 inline-flex min-h-11 items-center justify-center rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white transition hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-400"
             >
               Explorar servicios
@@ -451,6 +454,12 @@ export default function ClientBookingsView({
 
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href={`/${appointment.business.slug}`}
+                        className="rounded-full bg-zinc-950 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-zinc-800"
+                      >
+                        {appointment.business.name}
+                      </Link>
                       <span
                         className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${status.className}`}
                       >
@@ -522,7 +531,7 @@ export default function ClientBookingsView({
                       </div>
                     ) : filter === "history" ? (
                       <Link
-                        href={`/${businessSlug}`}
+                        href={`/${appointment.business.slug}`}
                         className="mt-0 inline-flex text-sm font-semibold text-zinc-700 underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-zinc-300 md:mt-4"
                       >
                         Reservar otra vez
@@ -533,7 +542,7 @@ export default function ClientBookingsView({
 
                 {rescheduleOpen && (
                   <AppointmentReschedulePicker
-                    businessSlug={businessSlug}
+                    businessSlug={appointment.business.slug}
                     barberId={appointment.barber.id}
                     serviceIds={appointment.services.map(
                       (service) => service.serviceId,

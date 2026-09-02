@@ -4,6 +4,8 @@ import { ConfigService } from '@nestjs/config';
 
 import nodemailer, { type Transporter } from 'nodemailer';
 
+import { PLATFORM_BRAND_NAME } from '../common/constants/platform';
+
 type SendEmailVerificationInput = {
   to: string;
   firstName: string;
@@ -134,7 +136,7 @@ export class EmailService {
               <div style="max-width:560px;margin:0 auto;overflow:hidden;border-radius:24px;background:#ffffff;border:1px solid #e4e4e7">
                 <div style="padding:24px 28px;background:#09090b;color:#ffffff">
                   <strong style="font-size:18px">${safeBusinessName}</strong>
-                  <div style="margin-top:4px;font-size:12px;color:#a1a1aa">AgendaBarber</div>
+                  <div style="margin-top:4px;font-size:12px;color:#a1a1aa">${PLATFORM_BRAND_NAME}</div>
                 </div>
                 <div style="padding:32px 28px">
                   <h1 style="margin:0;font-size:26px;line-height:1.2">Confirma tu correo</h1>
@@ -183,7 +185,7 @@ export class EmailService {
               <div style="max-width:560px;margin:0 auto;overflow:hidden;border-radius:24px;background:#ffffff;border:1px solid #e4e4e7">
                 <div style="padding:24px 28px;background:#09090b;color:#ffffff">
                   <strong style="font-size:18px">${safeBusinessName}</strong>
-                  <div style="margin-top:4px;font-size:12px;color:#a1a1aa">AgendaBarber</div>
+                  <div style="margin-top:4px;font-size:12px;color:#a1a1aa">${PLATFORM_BRAND_NAME}</div>
                 </div>
                 <div style="padding:32px 28px">
                   <h1 style="margin:0;font-size:26px;line-height:1.2">Restablece tu contraseña</h1>
@@ -216,7 +218,7 @@ export class EmailService {
       text: [
         `Hola ${firstName},`,
         '',
-        `Fuiste invitado a administrar ${businessName} en AgendaBarber.`,
+        `Fuiste invitado a administrar ${businessName} en ${PLATFORM_BRAND_NAME}.`,
         'Crea tu contraseña desde este enlace privado:',
         invitationUrl,
         '',
@@ -231,7 +233,7 @@ export class EmailService {
               <div style="max-width:560px;margin:0 auto;overflow:hidden;border-radius:24px;background:#ffffff;border:1px solid #e4e4e7">
                 <div style="padding:24px 28px;background:#09090b;color:#ffffff">
                   <strong style="font-size:18px">${safeBusinessName}</strong>
-                  <div style="margin-top:4px;font-size:12px;color:#a1a1aa">Invitación de AgendaBarber</div>
+                  <div style="margin-top:4px;font-size:12px;color:#a1a1aa">Invitación de ${PLATFORM_BRAND_NAME}</div>
                 </div>
                 <div style="padding:32px 28px">
                   <h1 style="margin:0;font-size:26px;line-height:1.2">Activa tu cuenta de administrador</h1>

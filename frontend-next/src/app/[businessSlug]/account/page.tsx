@@ -9,7 +9,7 @@ type ClientAccountPageProps = {
 export default async function ClientAccountPage({
   params,
 }: ClientAccountPageProps) {
-  const { businessSlug } = await params;
+  await params;
 
-  redirect(`/${businessSlug}/account/bookings`);
+  redirect("/mi-cuenta/reservas");
 }

@@ -1,4 +1,4 @@
-import ClientBookingsView from "@/features/client-account/components/ClientBookingsView";
+import { redirect } from "next/navigation";
 
 type ClientBookingsPageProps = {
   params: Promise<{
@@ -9,7 +9,7 @@ type ClientBookingsPageProps = {
 export default async function ClientBookingsPage({
   params,
 }: ClientBookingsPageProps) {
-  const { businessSlug } = await params;
+  await params;
 
-  return <ClientBookingsView businessSlug={businessSlug} />;
+  redirect("/mi-cuenta/reservas");
 }

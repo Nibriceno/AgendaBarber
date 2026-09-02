@@ -15,7 +15,7 @@ export function getDefaultRouteForRole(
       return `/${businessSlug}/barber/dashboard`;
 
     case "CLIENT":
-      return `/${businessSlug}`;
+      return "/mi-cuenta/reservas";
 
     default: {
       const exhaustiveCheck: never = role;

@@ -186,4 +186,29 @@ describe('PlatformBusinessesService', () => {
     );
     expect(emailService.sendBusinessAdminInvitation).not.toHaveBeenCalled();
   });
+
+  it('returns exact global counters instead of deriving them from one page', async () => {
+    prisma.$transaction.mockImplementationOnce((queries: unknown[]) =>
+      Promise.all(queries),
+    );
+    prisma.business.count
+      .mockResolvedValueOnce(12)
+      .mockResolvedValueOnce(8)
+      .mockResolvedValueOnce(3)
+      .mockResolvedValueOnce(1);
+    prisma.user.count.mockResolvedValue(240);
+    prisma.barber.count.mockResolvedValue(32);
+    prisma.service.count.mockResolvedValue(68);
+    prisma.appointment.count.mockResolvedValue(1400);
+
+    await expect(service.getSummary()).resolves.toEqual(
+      expect.objectContaining({
+        businesses: { total: 12, active: 8, suspended: 3, inactive: 1 },
+        users: 240,
+        barbers: 32,
+        services: 68,
+        appointments: 1400,
+      }),
+    );
+  });
 });

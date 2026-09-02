@@ -1,3 +1,5 @@
+import { PLATFORM_BRAND_NAME } from '../common/constants/platform';
+
 type EnvironmentVariables = Record<string, unknown>;
 
 const ALLOWED_NODE_ENVS = ['development', 'test', 'production'] as const;
@@ -192,7 +194,7 @@ export function validateEnvironment(config: EnvironmentVariables) {
       ? config.SMTP_FROM.trim()
       : nodeEnv === 'production'
         ? requireString(config, 'SMTP_FROM')
-        : 'AgendaBarber <no-reply@localhost>';
+        : `${PLATFORM_BRAND_NAME} <no-reply@localhost>`;
 
   const smtpUser =
     typeof config.SMTP_USER === 'string' && config.SMTP_USER.trim()

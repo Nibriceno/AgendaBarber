@@ -3,12 +3,12 @@ export type ClientAccountIconName = "bookings" | "settings";
 export const CLIENT_ACCOUNT_NAVIGATION = [
   {
     label: "Mis reservas",
-    path: "/account/bookings",
+    path: "/mi-cuenta/reservas",
     icon: "bookings",
   },
   {
     label: "Configuración",
-    path: "/account/settings",
+    path: "/mi-cuenta/configuracion",
     icon: "settings",
   },
 ] as const satisfies ReadonlyArray<{

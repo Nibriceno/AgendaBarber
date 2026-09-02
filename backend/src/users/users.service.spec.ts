@@ -9,17 +9,15 @@ import type { PrismaService } from '../prisma/prisma.service';
 describe('UsersService client self-service', () => {
   const findFirst = jest.fn();
   let capturedUpdate: unknown;
-  const update = jest.fn((input: unknown) => {
+  const updateMany = jest.fn((input: unknown) => {
     capturedUpdate = input;
-    return Promise.resolve({
-      id: 21,
-    });
+    return Promise.resolve({ count: 1 });
   });
 
   const service = new UsersService({
     user: {
       findFirst,
-      update,
+      updateMany,
     },
   } as unknown as PrismaService);
 
@@ -65,7 +63,7 @@ describe('UsersService client self-service', () => {
       }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
 
-    expect(update).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
   });
 
   it('updates only the authenticated client password after verification', async () => {

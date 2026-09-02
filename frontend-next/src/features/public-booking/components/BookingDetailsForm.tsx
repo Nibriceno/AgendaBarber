@@ -143,12 +143,7 @@ export default function BookingDetailsForm({
   } = useAuth();
 
   const isAuthenticatedClient =
-    user?.role === "CLIENT" &&
-    user.businessSlug === businessSlug;
-
-  const clientFromAnotherBusiness =
-    user?.role === "CLIENT" &&
-    user.businessSlug !== businessSlug;
+    user?.role === "CLIENT";
 
   const [form, setForm] =
     useState<FormState>(
@@ -248,13 +243,6 @@ export default function BookingDetailsForm({
         return;
       }
 
-      if (clientFromAnotherBusiness) {
-        setError(
-          "Tu sesión pertenece a otra barbería. Cierra sesión para reservar como invitado.",
-        );
-        return;
-      }
-
       const validationError =
         isAuthenticatedClient
           ? null
@@ -281,6 +269,7 @@ export default function BookingDetailsForm({
       try {
         const booking = isAuthenticatedClient
           ? await createClientBooking({
+              businessSlug,
               barberId:
                 barber.id,
 
@@ -609,18 +598,12 @@ export default function BookingDetailsForm({
                 />
 
                 <p className="mt-2 text-xs text-zinc-400">
-                  Recomendado: recibirás un enlace privado para gestionar tu reserva sin crear una cuenta.
+                  Recomendado: recibirás un enlace privado y, si más adelante creas tu cuenta con este correo, recuperaremos estas visitas en tu historial.
                 </p>
               </label>
             </div>
 
               </>
-            )}
-
-            {clientFromAnotherBusiness && (
-              <p role="alert" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
-                Tu sesión pertenece a otra barbería. Cierra sesión para reservar aquí como invitado.
-              </p>
             )}
 
             <div className="mt-4">
@@ -666,8 +649,7 @@ export default function BookingDetailsForm({
               type="submit"
               disabled={
                 submitting ||
-                authLoading ||
-                clientFromAnotherBusiness
+                authLoading
               }
               className="mt-6 flex h-13 min-h-[52px] w-full items-center justify-center rounded-xl bg-zinc-950 px-5 text-base font-semibold text-white transition hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-400 disabled:cursor-not-allowed disabled:bg-zinc-300"
             >

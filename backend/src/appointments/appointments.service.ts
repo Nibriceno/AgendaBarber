@@ -65,6 +65,29 @@ export class AppointmentsService {
   ) {}
 
   async findOneAuthorized(id: number, currentUser: AuthUser) {
+    if (currentUser.role === UserRole.CLIENT) {
+      if (!currentUser.customerIdentityId) {
+        throw new ForbiddenException('No tienes permiso para ver esta reserva');
+      }
+
+      const clientAppointment = await this.prisma.appointment.findFirst({
+        where: {
+          id,
+          deletedAt: null,
+          customer: {
+            customerIdentityId: currentUser.customerIdentityId,
+          },
+        },
+        select: this.clientAppointmentSelect(),
+      });
+
+      if (!clientAppointment) {
+        throw new ForbiddenException('No tienes permiso para ver esta reserva');
+      }
+
+      return clientAppointment;
+    }
+
     const appointment = await this.findOne(currentUser.businessId, id);
 
     if (
@@ -72,22 +95,6 @@ export class AppointmentsService {
       currentUser.role === UserRole.RECEPTIONIST
     ) {
       return appointment;
-    }
-
-    if (currentUser.role === UserRole.CLIENT) {
-      if (appointment.customerId !== currentUser.id) {
-        throw new ForbiddenException('No tienes permiso para ver esta reserva');
-      }
-
-      return this.prisma.appointment.findFirstOrThrow({
-        where: {
-          id,
-          businessId: currentUser.businessId,
-          customerId: currentUser.id,
-          deletedAt: null,
-        },
-        select: this.clientAppointmentSelect(),
-      });
     }
 
     if (currentUser.role === UserRole.BARBER) {
@@ -124,10 +131,15 @@ export class AppointmentsService {
       throw new ForbiddenException('Esta ruta es solo para clientes');
     }
 
+    if (!currentUser.customerIdentityId) {
+      return [];
+    }
+
     return this.prisma.appointment.findMany({
       where: {
-        businessId: currentUser.businessId,
-        customerId: currentUser.id,
+        customer: {
+          customerIdentityId: currentUser.customerIdentityId,
+        },
         deletedAt: null,
       },
       select: this.clientAppointmentSelect(),
@@ -277,13 +289,22 @@ export class AppointmentsService {
     }
 
     let customerId: number;
+    let businessId = currentUser.businessId;
+    let historyActorId = currentUser.id;
 
     if (currentUser.role === UserRole.CLIENT) {
       /*
        * Un CLIENT autenticado siempre reserva para sí mismo.
        * Aunque intentara enviar customerId en el body, no se usa.
        */
-      customerId = currentUser.id;
+      const target = await this.resolveGlobalClientForBusiness(
+        currentUser,
+        createAppointmentDto.businessSlug,
+      );
+
+      businessId = target.businessId;
+      customerId = target.customerId;
+      historyActorId = target.customerId;
     } else {
       if (createAppointmentDto.customerId === undefined) {
         throw new BadRequestException('Debes indicar el cliente de la reserva');
@@ -297,9 +318,9 @@ export class AppointmentsService {
       currentUser.role === UserRole.RECEPTIONIST;
 
     const appointment = await this.createAppointmentForCustomer({
-      businessId: currentUser.businessId,
+      businessId,
       customerId,
-      historyActorId: currentUser.id,
+      historyActorId,
       historyComment: 'Reserva creada',
       canApplyDiscount,
       createAppointmentDto,
@@ -309,8 +330,8 @@ export class AppointmentsService {
       return this.prisma.appointment.findFirstOrThrow({
         where: {
           id: appointment.id,
-          businessId: currentUser.businessId,
-          customerId: currentUser.id,
+          businessId,
+          customerId,
           deletedAt: null,
         },
         select: this.clientAppointmentSelect(),
@@ -370,7 +391,7 @@ export class AppointmentsService {
                 customerNotes: dto.customerNotes?.trim() || undefined,
                 internalNotes: dto.internalNotes?.trim() || undefined,
               },
-              source: dto.source as AppointmentSource,
+              source: dto.source,
               ...(!customer.isRegistered && { managementTokenHash }),
             });
 
@@ -1703,6 +1724,7 @@ export class AppointmentsService {
       business: {
         select: {
           name: true,
+          slug: true,
           timezone: true,
           currency: true,
           cancellationMinimumMinutes: true,
@@ -1830,7 +1852,7 @@ export class AppointmentsService {
       );
     }
 
-    const business = await this.validateBusiness(currentUser.businessId);
+    const business = await this.validateBusiness(appointment.businessId);
 
     if (!business.allowClientRescheduling) {
       throw new BadRequestException(
@@ -1892,7 +1914,7 @@ export class AppointmentsService {
     const updatedAppointment = await this.runSerializableTransaction(
       async (transaction) => {
         await this.validateOverlap(
-          currentUser.businessId,
+          appointment.businessId,
           appointment.barberId,
           startAt,
           endAt,
@@ -1904,8 +1926,8 @@ export class AppointmentsService {
           transaction,
           {
             id: appointment.id,
-            businessId: currentUser.businessId,
-            customerId: currentUser.id,
+            businessId: appointment.businessId,
+            customerId: appointment.customerId,
             status: appointment.status,
             deletedAt: null,
           },
@@ -1919,7 +1941,7 @@ export class AppointmentsService {
           data: {
             appointmentId: appointment.id,
 
-            actorId: currentUser.id,
+            actorId: appointment.customerId,
 
             previousStatus: appointment.status,
 
@@ -1962,7 +1984,7 @@ export class AppointmentsService {
       throw new BadRequestException('Esta reserva ya no puede ser cancelada.');
     }
 
-    const business = await this.validateBusiness(currentUser.businessId);
+    const business = await this.validateBusiness(appointment.businessId);
 
     if (!business.allowClientCancellation) {
       throw new BadRequestException(
@@ -1991,8 +2013,8 @@ export class AppointmentsService {
           transaction,
           {
             id: appointment.id,
-            businessId: currentUser.businessId,
-            customerId: currentUser.id,
+            businessId: appointment.businessId,
+            customerId: appointment.customerId,
             status: appointment.status,
             deletedAt: null,
           },
@@ -2000,7 +2022,7 @@ export class AppointmentsService {
             status: AppointmentStatus.CANCELLED,
             cancellationReason,
             cancelledAt: now,
-            cancelledById: currentUser.id,
+            cancelledById: appointment.customerId,
           },
         );
 
@@ -2008,7 +2030,7 @@ export class AppointmentsService {
           data: {
             appointmentId: appointment.id,
 
-            actorId: currentUser.id,
+            actorId: appointment.customerId,
 
             previousStatus: appointment.status,
 
@@ -2648,6 +2670,161 @@ export class AppointmentsService {
     }
   }
 
+  private async resolveGlobalClientForBusiness(
+    currentUser: AuthUser,
+    requestedBusinessSlug?: string,
+  ): Promise<{ businessId: number; customerId: number }> {
+    if (!currentUser.customerIdentityId) {
+      throw new ForbiddenException(
+        'La cuenta de cliente no tiene una identidad global válida.',
+      );
+    }
+
+    const normalizedSlug = requestedBusinessSlug?.trim().toLowerCase();
+    const business = await this.prisma.business.findFirst({
+      where: normalizedSlug
+        ? { slug: normalizedSlug, ...ACTIVE_BUSINESS_WHERE }
+        : { id: currentUser.businessId, ...ACTIVE_BUSINESS_WHERE },
+      select: { id: true },
+    });
+
+    if (!business) {
+      throw new NotFoundException('Barbería no encontrada o inactiva.');
+    }
+
+    const linkedProfile = await this.prisma.user.findFirst({
+      where: {
+        businessId: business.id,
+        customerIdentityId: currentUser.customerIdentityId,
+        role: UserRole.CLIENT,
+        isActive: true,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+
+    if (linkedProfile) {
+      return { businessId: business.id, customerId: linkedProfile.id };
+    }
+
+    const identity = await this.prisma.customerIdentity.findUnique({
+      where: { id: currentUser.customerIdentityId },
+      select: { email: true, phone: true },
+    });
+
+    if (!identity) {
+      throw new ForbiddenException(
+        'La cuenta de cliente no tiene una identidad global válida.',
+      );
+    }
+
+    const matchingEmailProfile = await this.prisma.user.findFirst({
+      where: {
+        businessId: business.id,
+        email: {
+          equals: identity.email,
+          mode: 'insensitive',
+        },
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        role: true,
+        isActive: true,
+        customerIdentityId: true,
+      },
+    });
+
+    if (matchingEmailProfile) {
+      if (
+        matchingEmailProfile.role !== UserRole.CLIENT ||
+        !matchingEmailProfile.isActive ||
+        (matchingEmailProfile.customerIdentityId !== null &&
+          matchingEmailProfile.customerIdentityId !==
+            currentUser.customerIdentityId)
+      ) {
+        throw new ConflictException(
+          'No es posible asociar tu cuenta con esta barbería.',
+        );
+      }
+
+      const linked = await this.prisma.user.update({
+        where: { id: matchingEmailProfile.id },
+        data: {
+          customerIdentityId: currentUser.customerIdentityId,
+        },
+        select: { id: true },
+      });
+
+      return { businessId: business.id, customerId: linked.id };
+    }
+
+    const phone = identity.phone ?? currentUser.phone;
+    const phoneOwner = await this.prisma.user.findFirst({
+      where: {
+        businessId: business.id,
+        phone,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+
+    if (phoneOwner) {
+      throw new ConflictException(
+        'Ya existe otro perfil con tu teléfono en esta barbería. Contacta al negocio para vincularlo de forma segura.',
+      );
+    }
+
+    try {
+      const profile = await this.prisma.user.create({
+        data: {
+          businessId: business.id,
+          customerIdentityId: currentUser.customerIdentityId,
+          firstName: currentUser.firstName,
+          lastName: currentUser.lastName,
+          phone,
+          email: identity.email,
+          role: UserRole.CLIENT,
+          isRegistered: true,
+          isActive: true,
+          emailVerified: true,
+        },
+        select: { id: true },
+      });
+
+      return { businessId: business.id, customerId: profile.id };
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const concurrentlyLinked = await this.prisma.user.findFirst({
+          where: {
+            businessId: business.id,
+            customerIdentityId: currentUser.customerIdentityId,
+            role: UserRole.CLIENT,
+            isActive: true,
+            deletedAt: null,
+          },
+          select: { id: true },
+        });
+
+        if (concurrentlyLinked) {
+          return {
+            businessId: business.id,
+            customerId: concurrentlyLinked.id,
+          };
+        }
+
+        throw new ConflictException(
+          'No es posible asociar tu cuenta con esta barbería.',
+        );
+      }
+
+      throw error;
+    }
+  }
+
   private async resolveGuestCustomerForBooking(
     transaction: Prisma.TransactionClient,
     businessId: number,
@@ -2676,6 +2853,7 @@ export class AppointmentsService {
         email: true,
         isRegistered: true,
         isActive: true,
+        customerIdentityId: true,
       },
     });
 
@@ -2697,7 +2875,10 @@ export class AppointmentsService {
        * o, en el futuro, un mecanismo OTP. Una petición pública
        * anónima no puede crear reservas sobre esa cuenta.
        */
-      if (existingByPhone.isRegistered) {
+      if (
+        existingByPhone.isRegistered ||
+        existingByPhone.customerIdentityId !== null
+      ) {
         throw new ConflictException(
           'No es posible realizar una reserva con estos datos.',
         );

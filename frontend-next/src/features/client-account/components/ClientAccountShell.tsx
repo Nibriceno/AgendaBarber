@@ -11,7 +11,7 @@ import AccountIcon from "./AccountIcon";
 import { CLIENT_ACCOUNT_NAVIGATION } from "../config/navigation";
 
 type ClientAccountShellProps = {
-  businessSlug: string;
+  businessSlug?: string;
   children: ReactNode;
 };
 
@@ -22,15 +22,16 @@ export default function ClientAccountShell({
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const landingBusinessSlug = businessSlug ?? user?.businessSlug;
 
   const handleLogout = async () => {
     await logout();
-    router.push(`/${businessSlug}`);
+    router.push(landingBusinessSlug ? `/${landingBusinessSlug}` : "/");
   };
 
   return (
     <div className="min-h-full bg-zinc-50 text-zinc-950">
-      <PublicHeader businessSlug={businessSlug} />
+      <PublicHeader businessSlug={landingBusinessSlug ?? ""} />
 
       <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-12">
         <div className="mb-7 sm:mb-9">
@@ -51,7 +52,7 @@ export default function ClientAccountShell({
           className="mb-6 flex gap-2 overflow-x-auto rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm lg:hidden"
         >
           {CLIENT_ACCOUNT_NAVIGATION.map((item) => {
-            const href = `/${businessSlug}${item.path}`;
+            const href = item.path;
             const active = pathname === href;
 
             return (
@@ -89,7 +90,7 @@ export default function ClientAccountShell({
 
             <nav aria-label="Navegación de mi cuenta" className="p-3">
               {CLIENT_ACCOUNT_NAVIGATION.map((item) => {
-                const href = `/${businessSlug}${item.path}`;
+                const href = item.path;
                 const active = pathname === href;
 
                 return (

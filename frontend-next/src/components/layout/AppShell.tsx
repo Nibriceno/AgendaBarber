@@ -21,6 +21,11 @@ import {
 } from "@/config/navigation";
 
 import {
+  PLATFORM_BRAND_INITIALS,
+  PLATFORM_BRAND_NAME,
+} from "@/config/site";
+
+import {
   useAuth,
 } from "@/features/auth/context/AuthContext";
 
@@ -105,7 +110,7 @@ export default function AppShell({
         );
       },
     )?.label ??
-    "AgendaBarber";
+    PLATFORM_BRAND_NAME;
 
   return (
     <div className="min-h-screen bg-zinc-50">
@@ -118,12 +123,12 @@ export default function AppShell({
             className="flex items-center gap-3"
           >
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-950 text-sm font-semibold text-white">
-              AB
+              {PLATFORM_BRAND_INITIALS}
             </div>
 
             <div>
               <p className="font-semibold tracking-tight text-zinc-950">
-                AgendaBarber
+                {PLATFORM_BRAND_NAME}
               </p>
 
               <p className="max-w-36 truncate text-xs text-zinc-400">
@@ -236,11 +241,11 @@ export default function AppShell({
                 }
               >
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-950 text-xs font-semibold text-white">
-                  AB
+                  {PLATFORM_BRAND_INITIALS}
                 </div>
 
                 <span className="font-semibold">
-                  AgendaBarber
+                  {PLATFORM_BRAND_NAME}
                 </span>
               </Link>
 

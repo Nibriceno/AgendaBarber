@@ -9,6 +9,7 @@ export type AuthUser = {
   role: UserRole;
   businessId: number;
   businessSlug: string;
+  customerIdentityId?: string | null;
 };
 
 export type LoginCredentials = {

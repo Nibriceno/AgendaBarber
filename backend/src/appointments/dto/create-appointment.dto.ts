@@ -8,9 +8,19 @@ import {
   IsOptional,
   IsString,
   Min,
+  Matches,
+  MaxLength,
 } from 'class-validator';
 
 export class CreateAppointmentDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
+    message: 'businessSlug tiene un formato inválido',
+  })
+  businessSlug?: string;
+
   @IsOptional()
   @IsInt()
   @Min(1)

@@ -6,9 +6,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { JwtStrategy } from './jwt.strategy';
 
 describe('JwtStrategy business state', () => {
-  const userFindFirst = jest.fn<
-    (args: unknown) => Promise<unknown>
-  >();
+  const userFindFirst = jest.fn<(args: unknown) => Promise<unknown>>();
 
   const prisma = {
     user: {
@@ -54,8 +52,11 @@ describe('JwtStrategy business state', () => {
         phone: '+56911111111',
         email: 'ana@example.com',
         authVersion: 2,
+        customerIdentityId: null,
         business: {
           slug: 'agenda-barber',
+          status: BusinessStatus.ACTIVE,
+          deletedAt: null,
         },
       });
     });
@@ -77,10 +78,6 @@ describe('JwtStrategy business state', () => {
       businessId: 7,
       isActive: true,
       deletedAt: null,
-      business: {
-        status: BusinessStatus.ACTIVE,
-        deletedAt: null,
-      },
     });
   });
 

@@ -109,6 +109,7 @@ export type CreateGuestBookingInput = {
 };
 
 export type CreateClientBookingInput = {
+  businessSlug: string;
   barberId: number;
   serviceIds: number[];
   startAt: string;

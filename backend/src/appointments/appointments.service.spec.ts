@@ -31,6 +31,7 @@ describe('AppointmentsService client access', () => {
     lastName: 'Pérez',
     phone: '+56912345678',
     email: 'ana@example.com',
+    customerIdentityId: '40b52e1d-e89e-4a8b-bc83-5a18a63cb64d',
   };
 
   beforeEach(() => {
@@ -38,14 +39,15 @@ describe('AppointmentsService client access', () => {
     capturedQuery = undefined;
   });
 
-  it('scopes my appointments to the authenticated client and tenant', async () => {
+  it('scopes my appointments to the global customer identity', async () => {
     await service.findMyAppointments(client);
 
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          businessId: client.businessId,
-          customerId: client.id,
+          customer: {
+            customerIdentityId: client.customerIdentityId,
+          },
           deletedAt: null,
         },
       }),
@@ -92,6 +94,7 @@ describe('AppointmentsService authenticated client creation', () => {
     lastName: 'Pérez',
     phone: '+56912345678',
     email: 'ana@example.com',
+    customerIdentityId: '40b52e1d-e89e-4a8b-bc83-5a18a63cb64d',
   };
 
   beforeEach(() => {
@@ -99,6 +102,12 @@ describe('AppointmentsService authenticated client creation', () => {
     (
       service as unknown as Record<string, unknown>
     ).createAppointmentForCustomer = createAppointmentForCustomer;
+    (
+      service as unknown as Record<string, unknown>
+    ).resolveGlobalClientForBusiness = jest.fn().mockResolvedValue({
+      businessId: client.businessId,
+      customerId: client.id,
+    });
     createAppointmentForCustomer.mockResolvedValue({ id: 88 });
     findFirstOrThrow.mockResolvedValue({
       id: 88,
@@ -544,6 +553,49 @@ describe('AppointmentsService manual customer resolution', () => {
         lastName: 'Persona',
         phone: '+56912345678',
         email: 'otra@example.com',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+});
+
+describe('AppointmentsService guest identity protection', () => {
+  const service = new AppointmentsService({} as PrismaService);
+
+  it('impide que una reserva anónima reutilice un perfil ya vinculado a una cuenta global', async () => {
+    const transaction = {
+      user: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 21,
+          role: UserRole.CLIENT,
+          email: 'ana@example.com',
+          isRegistered: false,
+          isActive: true,
+          customerIdentityId: '40b52e1d-e89e-4a8b-bc83-5a18a63cb64d',
+        }),
+      },
+    };
+
+    const resolveGuest = (
+      service as unknown as {
+        resolveGuestCustomerForBooking: (
+          transaction: unknown,
+          businessId: number,
+          guest: {
+            firstName: string;
+            lastName: string;
+            phone: string;
+            email?: string;
+          },
+        ) => Promise<unknown>;
+      }
+    ).resolveGuestCustomerForBooking.bind(service);
+
+    await expect(
+      resolveGuest(transaction, 8, {
+        firstName: 'Ana',
+        lastName: 'Pérez',
+        phone: '+56912345678',
+        email: 'ana@example.com',
       }),
     ).rejects.toBeInstanceOf(ConflictException);
   });

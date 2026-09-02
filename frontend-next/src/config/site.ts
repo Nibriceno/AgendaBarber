@@ -1,3 +1,6 @@
+export const PLATFORM_BRAND_NAME = "AgendaYa";
+export const PLATFORM_BRAND_INITIALS = "AY";
+
 export const SOCIAL_NETWORKS = [
   {
     key: "instagram",

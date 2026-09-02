@@ -149,7 +149,7 @@ export default function BookingConfirmationView({
     ? `/${businessSlug}/booking/manage/${encodeURIComponent(
         booking.confirmationCode,
       )}#token=${encodeURIComponent(booking.managementToken)}`
-    : `/${businessSlug}/account/bookings`;
+    : "/mi-cuenta/reservas";
 
   return (
     <div className="min-h-screen bg-zinc-50">

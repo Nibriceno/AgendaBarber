@@ -35,6 +35,11 @@ export class PlatformBusinessesController {
     return this.platformBusinessesService.findAll(query);
   }
 
+  @Get('summary')
+  getSummary() {
+    return this.platformBusinessesService.getSummary();
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.platformBusinessesService.findOne(id);

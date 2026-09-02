@@ -63,14 +63,15 @@ export function AuthGuard({
     user
       ? getDefaultRouteForRole(
           user.role,
-          user.businessSlug,
+          user.role === "CLIENT" ? businessSlug : user.businessSlug,
         )
       : null;
 
+  const belongsToRouteBusiness =
+    user?.role === "CLIENT" || user?.businessSlug === businessSlug;
+
   const hasAccess =
-    user &&
-    user.businessSlug ===
-      businessSlug
+    user && belongsToRouteBusiness
       ? canAccessProtectedRoute(
           pathname,
           businessSlug,
@@ -94,10 +95,7 @@ export function AuthGuard({
       return;
     }
 
-    if (
-      user.businessSlug !==
-      businessSlug
-    ) {
+    if (user.role !== "CLIENT" && user.businessSlug !== businessSlug) {
       router.replace(
         getDefaultRouteForRole(
           user.role,
@@ -119,7 +117,7 @@ export function AuthGuard({
       router.replace(
         getDefaultRouteForRole(
           user.role,
-          user.businessSlug,
+          user.role === "CLIENT" ? businessSlug : user.businessSlug,
         ),
       );
 
@@ -130,7 +128,7 @@ export function AuthGuard({
       router.replace(
         getDefaultRouteForRole(
           user.role,
-          user.businessSlug,
+          user.role === "CLIENT" ? businessSlug : user.businessSlug,
         ),
       );
     }

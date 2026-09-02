@@ -87,7 +87,7 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       SMTP_SECURE: "false"
-      SMTP_FROM: "AgendaBarber <no-reply@agendabarber.local>"
+      SMTP_FROM: "AgendaYa <no-reply@agendaya.local>"
 
     ports:
       - "${BACKEND_PORT}:3000"

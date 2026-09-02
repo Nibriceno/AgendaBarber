@@ -60,18 +60,25 @@ describe('AuthService', () => {
 
     user: {
       findFirst: jest.fn(),
+      findMany: jest.fn(),
       create: jest.fn<(input: CreateUserInput) => Promise<CreatedUser>>(),
+      update: jest.fn(),
       updateMany: jest.fn<
         (input: UpdateUserInput) => Promise<{
           count: number;
         }>
       >(),
     },
+    customerIdentity: {
+      findUnique: jest.fn(),
+      create: jest.fn(),
+    },
     authSession: {
       create: jest.fn(),
       findFirst: jest.fn(),
       updateMany: jest.fn(),
     },
+    $transaction: jest.fn(),
   };
 
   const jwtService = {
@@ -107,6 +114,18 @@ describe('AuthService', () => {
     jwtService.signAsync.mockResolvedValue('access-token');
     prisma.authSession.create.mockResolvedValue({ id: 'session-id' });
     prisma.authSession.updateMany.mockResolvedValue({ count: 1 });
+    prisma.customerIdentity.findUnique.mockResolvedValue(null);
+    prisma.customerIdentity.create.mockResolvedValue({
+      id: '40b52e1d-e89e-4a8b-bc83-5a18a63cb64d',
+    });
+    prisma.user.findMany.mockResolvedValue([]);
+    prisma.$transaction.mockImplementation(async (operation) => {
+      if (typeof operation === 'function') {
+        return operation(prisma);
+      }
+
+      return Promise.all(operation);
+    });
 
     service = new AuthService(
       prisma as never,
@@ -123,7 +142,7 @@ describe('AuthService', () => {
       slug: 'barber-booking',
     });
 
-    prisma.user.findFirst.mockResolvedValue(null);
+    prisma.user.findMany.mockResolvedValue([]);
 
     prisma.user.create.mockImplementation((input: CreateUserInput) => {
       createInput = input;
@@ -173,6 +192,8 @@ describe('AuthService', () => {
   it('confirma un token vigente una sola vez', async () => {
     prisma.user.findFirst.mockResolvedValue({
       id: 21,
+      email: 'ana@example.com',
+      customerIdentityId: '40b52e1d-e89e-4a8b-bc83-5a18a63cb64d',
       emailVerificationExpiresAt: new Date(Date.now() + 60_000),
     });
 
@@ -191,12 +212,28 @@ describe('AuthService', () => {
 
     expect(result.message).toContain('confirmado');
 
-    if (!updateInput) {
+    const verificationUpdate = prisma.user.updateMany.mock.calls[0]?.[0];
+
+    if (!verificationUpdate) {
       throw new Error('No se capturó la actualización.');
     }
 
-    expect(updateInput.data.emailVerified).toBe(true);
-    expect(updateInput.data.emailVerificationTokenHash).toBeNull();
+    expect(verificationUpdate.data.emailVerified).toBe(true);
+    expect(verificationUpdate.data.emailVerificationTokenHash).toBeNull();
+    expect(prisma.user.updateMany.mock.calls[1]?.[0]).toEqual(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          email: {
+            equals: 'ana@example.com',
+            mode: 'insensitive',
+          },
+          customerIdentityId: null,
+        }),
+        data: {
+          customerIdentityId: '40b52e1d-e89e-4a8b-bc83-5a18a63cb64d',
+        },
+      }),
+    );
   });
 
   it('impide iniciar sesión a un cliente sin correo verificado', async () => {
@@ -267,9 +304,7 @@ describe('AuthService', () => {
     );
 
     expect(result.accessToken).toBe('access-token');
-    expect(result.refreshToken).toMatch(
-      /^[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/i,
-    );
+    expect(result.refreshToken).toMatch(/^[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/i);
     expect(prisma.authSession.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -280,8 +315,8 @@ describe('AuthService', () => {
         }),
       }),
     );
-    const storedHash = prisma.authSession.create.mock.calls[0][0].data
-      .refreshTokenHash;
+    const storedHash =
+      prisma.authSession.create.mock.calls[0][0].data.refreshTokenHash;
     expect(storedHash).not.toBe(result.refreshToken);
     expect(jwtService.signAsync).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -292,6 +327,43 @@ describe('AuthService', () => {
         sessionId: expect.any(String),
       }),
     );
+  });
+
+  it('permite iniciar sesión al cliente global desde otra barbería', async () => {
+    const passwordHash = await bcrypt.hash('ClaveSegura1', 4);
+
+    prisma.business.findFirst.mockResolvedValue({
+      id: 9,
+      slug: 'otra-barberia',
+    });
+    prisma.user.findFirst.mockResolvedValue(null);
+    prisma.user.findMany.mockResolvedValue([
+      {
+        id: 21,
+        businessId: 7,
+        firstName: 'Ana',
+        lastName: 'Pérez',
+        phone: '+56912345678',
+        email: 'ana@example.com',
+        role: UserRole.CLIENT,
+        passwordHash,
+        emailVerified: true,
+        authVersion: 0,
+        customerIdentityId: '40b52e1d-e89e-4a8b-bc83-5a18a63cb64d',
+        business: { slug: 'barber-booking' },
+      },
+    ]);
+
+    const result = await service.login({
+      businessSlug: 'otra-barberia',
+      email: 'ana@example.com',
+      password: 'ClaveSegura1',
+    });
+
+    expect(result.user.customerIdentityId).toBe(
+      '40b52e1d-e89e-4a8b-bc83-5a18a63cb64d',
+    );
+    expect(result.user.businessSlug).toBe('barber-booking');
   });
 
   it('rota el refresh token y no reutiliza el secreto anterior', async () => {
@@ -457,6 +529,8 @@ describe('AuthService', () => {
 
     prisma.user.findFirst.mockResolvedValue({
       id: 21,
+      role: UserRole.CLIENT,
+      customerIdentityId: null,
       passwordHash: currentPasswordHash,
       passwordResetExpiresAt: new Date(Date.now() + 60_000),
     });

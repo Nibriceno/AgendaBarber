@@ -1,10 +1,12 @@
 import Link from "next/link";
 
+import { PLATFORM_BRAND_NAME } from "@/config/site";
+
 const TERMS_SECTIONS = [
   {
     title: "1. Alcance del servicio",
     paragraphs: [
-      "AgendaBarber proporciona una plataforma tecnológica para consultar disponibilidad y gestionar reservas con negocios independientes. Cada barbería es responsable de los servicios que ofrece, sus precios, profesionales, horarios y atención al cliente.",
+      `${PLATFORM_BRAND_NAME} proporciona una plataforma tecnológica para consultar disponibilidad y gestionar reservas con negocios independientes. Cada barbería es responsable de los servicios que ofrece, sus precios, profesionales, horarios y atención al cliente.`,
       "Al utilizar la plataforma aceptas estos términos y las condiciones particulares informadas por la barbería seleccionada.",
     ],
   },
@@ -18,7 +20,7 @@ const TERMS_SECTIONS = [
   {
     title: "3. Cambios, cancelaciones e inasistencias",
     paragraphs: [
-      "Las reglas y plazos para cancelar o reprogramar son definidos por cada barbería y se informarán durante la gestión de la cita. AgendaBarber no reemplaza los acuerdos comerciales entre el cliente y el negocio.",
+      `Las reglas y plazos para cancelar o reprogramar son definidos por cada barbería y se informarán durante la gestión de la cita. ${PLATFORM_BRAND_NAME} no reemplaza los acuerdos comerciales entre el cliente y el negocio.`,
       "Si no puedes asistir, debes cancelar o reprogramar con la anticipación exigida por el negocio.",
     ],
   },
@@ -39,7 +41,7 @@ const TERMS_SECTIONS = [
   {
     title: "6. Disponibilidad de la plataforma",
     paragraphs: [
-      "Trabajamos para mantener AgendaBarber disponible y segura, pero pueden existir interrupciones por mantenimiento, fallas de red o eventos fuera de nuestro control. Cuando sea razonable, procuraremos restaurar el servicio oportunamente.",
+      `Trabajamos para mantener ${PLATFORM_BRAND_NAME} disponible y segura, pero pueden existir interrupciones por mantenimiento, fallas de red o eventos fuera de nuestro control. Cuando sea razonable, procuraremos restaurar el servicio oportunamente.`,
     ],
   },
   {
@@ -67,7 +69,7 @@ export default function TermsPage() {
           <span aria-hidden="true">
             ←
           </span>
-          Volver a AgendaBarber
+          Volver a {PLATFORM_BRAND_NAME}
         </Link>
 
         <header className="mt-8 rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-10">
@@ -80,7 +82,7 @@ export default function TermsPage() {
           </h1>
 
           <p className="mt-4 max-w-2xl text-sm leading-6 text-zinc-600 sm:text-base">
-            Estos términos regulan el uso de AgendaBarber y su sistema de reservas. Léelos antes de crear o gestionar una cita.
+            Estos términos regulan el uso de {PLATFORM_BRAND_NAME} y su sistema de reservas. Léelos antes de crear o gestionar una cita.
           </p>
 
           <p className="mt-5 text-xs text-zinc-400">

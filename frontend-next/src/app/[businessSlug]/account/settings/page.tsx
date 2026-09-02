@@ -1,5 +1,5 @@
-import ClientSettingsView from "@/features/client-account/components/ClientSettingsView";
+import { redirect } from "next/navigation";
 
 export default function ClientSettingsPage() {
-  return <ClientSettingsView />;
+  redirect("/mi-cuenta/configuracion");
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { PLATFORM_BRAND_INITIALS, PLATFORM_BRAND_NAME } from "@/config/site";
 import AccountIcon from "@/features/client-account/components/AccountIcon";
 import { CLIENT_ACCOUNT_NAVIGATION } from "@/features/client-account/config/navigation";
 import { useAuth } from "@/features/auth/context/AuthContext";
@@ -78,15 +79,15 @@ export default function PublicHeader({
           className="group flex min-w-0 items-center gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-white/40"
         >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white text-sm font-bold text-zinc-950 transition group-hover:scale-[1.03]">
-            AB
+            {PLATFORM_BRAND_INITIALS}
           </span>
 
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold tracking-tight text-white sm:text-base">
-              {businessName ?? "AgendaBarber"}
+              {businessName ?? PLATFORM_BRAND_NAME}
             </span>
             <span className="hidden text-[10px] font-medium uppercase tracking-[0.2em] text-zinc-500 sm:block">
-              {businessName ? "AgendaBarber" : "Reservas online"}
+              {businessName ? PLATFORM_BRAND_NAME : "Reservas online"}
             </span>
           </span>
         </Link>
@@ -144,7 +145,7 @@ export default function PublicHeader({
                   {CLIENT_ACCOUNT_NAVIGATION.map((item) => (
                     <Link
                       key={item.path}
-                      href={`/${businessSlug}${item.path}`}
+                      href={item.path}
                       onClick={() => setMenuOpen(false)}
                       className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 hover:text-zinc-950 focus:outline-none focus:ring-2 focus:ring-zinc-300"
                     >

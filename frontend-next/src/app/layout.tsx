@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import SiteFooter from "@/components/layout/SiteFooter";
+import { PLATFORM_BRAND_NAME } from "@/config/site";
 import Providers from "./providers";
 import "./globals.css";
 
@@ -15,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AgendaBarber",
+  title: PLATFORM_BRAND_NAME,
   description: "Sistema de reservas para barberías",
 };
 

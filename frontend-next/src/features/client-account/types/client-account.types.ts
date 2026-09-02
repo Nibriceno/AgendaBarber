@@ -19,6 +19,7 @@ export type ClientAppointment = {
   cancellationReason: string | null;
   business: {
     name: string;
+    slug: string;
     timezone: string;
     currency: string;
     cancellationMinimumMinutes: number;

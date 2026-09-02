@@ -53,11 +53,39 @@ export class UsersService {
   async updateMyProfile(currentUser: AuthUser, dto: UpdateMyProfileDto) {
     this.assertClientAccount(currentUser);
 
-    return this.update(currentUser.businessId, currentUser.id, {
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-      phone: dto.phone,
-    });
+    if (!currentUser.customerIdentityId) {
+      return this.update(currentUser.businessId, currentUser.id, {
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        phone: dto.phone,
+      });
+    }
+
+    const firstName = (dto.firstName ?? currentUser.firstName).trim();
+    const lastName = (dto.lastName ?? currentUser.lastName).trim();
+    const phone = (dto.phone ?? currentUser.phone).trim();
+
+    try {
+      await this.prisma.$transaction([
+        this.prisma.customerIdentity.update({
+          where: { id: currentUser.customerIdentityId },
+          data: { phone },
+        }),
+        this.prisma.user.updateMany({
+          where: {
+            customerIdentityId: currentUser.customerIdentityId,
+            role: UserRole.CLIENT,
+            deletedAt: null,
+          },
+          data: { firstName, lastName, phone },
+        }),
+      ]);
+    } catch (error) {
+      this.handleUniqueConstraint(error);
+      throw error;
+    }
+
+    return this.getMyProfile(currentUser);
   }
 
   async changeMyPassword(currentUser: AuthUser, dto: ChangeMyPasswordDto) {
@@ -74,6 +102,7 @@ export class UsersService {
       select: {
         id: true,
         passwordHash: true,
+        customerIdentityId: true,
       },
     });
 
@@ -103,18 +132,19 @@ export class UsersService {
 
     const passwordHash = await bcrypt.hash(dto.newPassword, 12);
 
-    await this.prisma.user.update({
-      where: {
-        id: user.id,
-      },
+    await this.prisma.user.updateMany({
+      where: user.customerIdentityId
+        ? {
+            customerIdentityId: user.customerIdentityId,
+            role: UserRole.CLIENT,
+            isRegistered: true,
+            passwordHash: { not: null },
+            deletedAt: null,
+          }
+        : { id: user.id },
       data: {
         passwordHash,
-        authVersion: {
-          increment: 1,
-        },
-      },
-      select: {
-        id: true,
+        authVersion: { increment: 1 },
       },
     });
 

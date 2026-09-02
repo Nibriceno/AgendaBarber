@@ -14,7 +14,7 @@ import {
   ACCESS_TOKEN_COOKIE,
   getRequestCookie,
 } from '../cookies/auth-cookie.util';
-import { ACTIVE_BUSINESS_WHERE } from '../../businesses/business-status';
+import { isBusinessOperational } from '../../businesses/business-status';
 
 type JwtPayload = {
   tokenType: 'tenant';
@@ -23,6 +23,7 @@ type JwtPayload = {
   role: UserRole;
   authVersion?: number;
   sessionId: string;
+  customerIdentityId?: string | null;
 };
 
 @Injectable()
@@ -40,7 +41,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
-        (request: Request) => getRequestCookie(request, ACCESS_TOKEN_COOKIE) ?? null,
+        (request: Request) =>
+          getRequestCookie(request, ACCESS_TOKEN_COOKIE) ?? null,
         ExtractJwt.fromAuthHeaderAsBearerToken(),
       ]),
 
@@ -65,8 +67,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
         deletedAt: null,
 
-        business: ACTIVE_BUSINESS_WHERE,
-
         authSessions: {
           some: {
             id: payload.sessionId,
@@ -88,16 +88,26 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         phone: true,
         email: true,
         authVersion: true,
+        customerIdentityId: true,
 
         business: {
           select: {
             slug: true,
+            status: true,
+            deletedAt: true,
           },
         },
       },
     });
 
     if (!user) {
+      throw new UnauthorizedException('Sesión inválida.');
+    }
+
+    if (
+      user.role !== UserRole.CLIENT &&
+      !isBusinessOperational(user.business)
+    ) {
       throw new UnauthorizedException('Sesión inválida.');
     }
 
@@ -110,6 +120,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       id: user.id,
       businessId: user.businessId,
       businessSlug: user.business.slug,
+      customerIdentityId: user.customerIdentityId,
       role: user.role,
       firstName: user.firstName,
       lastName: user.lastName,

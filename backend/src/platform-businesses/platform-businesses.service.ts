@@ -90,6 +90,57 @@ export class PlatformBusinessesService {
     };
   }
 
+  async getSummary() {
+    const businessWhere: Prisma.BusinessWhereInput = { deletedAt: null };
+    const [
+      businesses,
+      activeBusinesses,
+      suspendedBusinesses,
+      inactiveBusinesses,
+      users,
+      barbers,
+      services,
+      appointments,
+    ] = await this.prisma.$transaction([
+      this.prisma.business.count({ where: businessWhere }),
+      this.prisma.business.count({
+        where: { ...businessWhere, status: BusinessStatus.ACTIVE },
+      }),
+      this.prisma.business.count({
+        where: { ...businessWhere, status: BusinessStatus.SUSPENDED },
+      }),
+      this.prisma.business.count({
+        where: { ...businessWhere, status: BusinessStatus.INACTIVE },
+      }),
+      this.prisma.user.count({
+        where: { deletedAt: null, business: businessWhere },
+      }),
+      this.prisma.barber.count({
+        where: { deletedAt: null, business: businessWhere },
+      }),
+      this.prisma.service.count({
+        where: { deletedAt: null, business: businessWhere },
+      }),
+      this.prisma.appointment.count({
+        where: { deletedAt: null, business: businessWhere },
+      }),
+    ]);
+
+    return {
+      businesses: {
+        total: businesses,
+        active: activeBusinesses,
+        suspended: suspendedBusinesses,
+        inactive: inactiveBusinesses,
+      },
+      users,
+      barbers,
+      services,
+      appointments,
+      generatedAt: new Date(),
+    };
+  }
+
   async findOne(id: number) {
     const business = await this.prisma.business.findFirst({
       where: { id, deletedAt: null },
@@ -97,35 +148,70 @@ export class PlatformBusinessesService {
 
     if (!business) throw new NotFoundException('Negocio no encontrado.');
 
-    const [users, clients, team, barbers, services, appointments] =
-      await this.prisma.$transaction([
-        this.prisma.user.count({ where: { businessId: id, deletedAt: null } }),
-        this.prisma.user.count({
-          where: { businessId: id, role: UserRole.CLIENT, deletedAt: null },
-        }),
-        this.prisma.user.count({
-          where: {
-            businessId: id,
-            role: {
-              in: [UserRole.ADMIN, UserRole.RECEPTIONIST, UserRole.BARBER],
-            },
-            deletedAt: null,
+    const [
+      users,
+      clients,
+      team,
+      barbers,
+      services,
+      appointments,
+      initialAdmin,
+    ] = await this.prisma.$transaction([
+      this.prisma.user.count({ where: { businessId: id, deletedAt: null } }),
+      this.prisma.user.count({
+        where: { businessId: id, role: UserRole.CLIENT, deletedAt: null },
+      }),
+      this.prisma.user.count({
+        where: {
+          businessId: id,
+          role: {
+            in: [UserRole.ADMIN, UserRole.RECEPTIONIST, UserRole.BARBER],
           },
-        }),
-        this.prisma.barber.count({
-          where: { businessId: id, deletedAt: null },
-        }),
-        this.prisma.service.count({
-          where: { businessId: id, deletedAt: null },
-        }),
-        this.prisma.appointment.count({
-          where: { businessId: id, deletedAt: null },
-        }),
-      ]);
+          deletedAt: null,
+        },
+      }),
+      this.prisma.barber.count({
+        where: { businessId: id, deletedAt: null },
+      }),
+      this.prisma.service.count({
+        where: { businessId: id, deletedAt: null },
+      }),
+      this.prisma.appointment.count({
+        where: { businessId: id, deletedAt: null },
+      }),
+      this.prisma.user.findFirst({
+        where: {
+          businessId: id,
+          role: UserRole.ADMIN,
+          deletedAt: null,
+        },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+          isActive: true,
+          isRegistered: true,
+          emailVerified: true,
+          lastLoginAt: true,
+          businessInvitation: {
+            select: {
+              expiresAt: true,
+              sentAt: true,
+              acceptedAt: true,
+              revokedAt: true,
+            },
+          },
+        },
+      }),
+    ]);
 
     return {
       ...business,
       counters: { users, clients, team, barbers, services, appointments },
+      initialAdmin,
     };
   }
 

@@ -235,6 +235,7 @@ export class AuthController {
       id: currentUser.id,
       businessId: currentUser.businessId,
       businessSlug: currentUser.businessSlug,
+      customerIdentityId: currentUser.customerIdentityId,
       role: currentUser.role,
       firstName: currentUser.firstName,
       lastName: currentUser.lastName,
@@ -263,7 +264,8 @@ export class AuthController {
   }
 
   private getRefreshTokenTtlMs(): number {
-    const days = this.configService.get<number>('REFRESH_TOKEN_EXPIRES_DAYS') ?? 14;
+    const days =
+      this.configService.get<number>('REFRESH_TOKEN_EXPIRES_DAYS') ?? 14;
 
     return days * 24 * 60 * 60 * 1000;
   }
