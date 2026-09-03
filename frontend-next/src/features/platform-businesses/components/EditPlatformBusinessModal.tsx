@@ -62,7 +62,7 @@ export function EditPlatformBusinessModal({
   );
 
   return (
-    <Modal open title="Editar barbería" description="Los cambios afectan la identidad y configuración global del negocio." onClose={onClose} closeDisabled={submitting} size="large">
+    <Modal open title="Editar negocio" description="Los cambios afectan la identidad y configuración global del negocio." onClose={onClose} closeDisabled={submitting} size="large">
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">{field("name", "Nombre comercial")}{field("slug", "Slug / URL")}{field("email", "Correo", "email")}{field("phone", "Teléfono")}<div className="sm:col-span-2">{field("address", "Dirección")}</div>{field("timezone", "Zona horaria")}{field("currency", "Moneda")}</div>
         {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}

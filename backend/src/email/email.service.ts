@@ -237,7 +237,7 @@ export class EmailService {
                 </div>
                 <div style="padding:32px 28px">
                   <h1 style="margin:0;font-size:26px;line-height:1.2">Activa tu cuenta de administrador</h1>
-                  <p style="margin:18px 0 0;line-height:1.7;color:#52525b">Hola ${safeFirstName}, crea tu contraseña para comenzar a administrar la barbería.</p>
+                  <p style="margin:18px 0 0;line-height:1.7;color:#52525b">Hola ${safeFirstName}, crea tu contraseña para comenzar a administrar el negocio.</p>
                   <a href="${safeInvitationUrl}" style="display:inline-block;margin-top:24px;padding:14px 22px;border-radius:12px;background:#18181b;color:#ffffff;text-decoration:none;font-weight:700">Aceptar invitación</a>
                   <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#71717a">El enlace vence en 72 horas y funciona una sola vez. Si no esperabas esta invitación, ignora este correo.</p>
                 </div>

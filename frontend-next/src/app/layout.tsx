@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: PLATFORM_BRAND_NAME,
-  description: "Sistema de reservas para barberías",
+  description: "Agenda online para negocios de servicios y sus clientes.",
 };
 
 export default function RootLayout({

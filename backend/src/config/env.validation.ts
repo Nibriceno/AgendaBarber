@@ -57,7 +57,11 @@ function validateHttpUrl(value: string, key: string): string {
   return url.toString().replace(/\/$/, '');
 }
 
-function parseBoolean(value: unknown, fallback: boolean): boolean {
+function parseBoolean(
+  value: unknown,
+  fallback: boolean,
+  key = 'valor',
+): boolean {
   if (value === undefined || value === null || value === '') {
     return fallback;
   }
@@ -70,7 +74,7 @@ function parseBoolean(value: unknown, fallback: boolean): boolean {
     return false;
   }
 
-  throw new Error('SMTP_SECURE debe ser true o false.');
+  throw new Error(`${key} debe ser true o false.`);
 }
 
 export function validateEnvironment(config: EnvironmentVariables) {
@@ -187,7 +191,11 @@ export function validateEnvironment(config: EnvironmentVariables) {
     throw new Error('SMTP_PORT debe ser un puerto válido.');
   }
 
-  const smtpSecure = parseBoolean(config.SMTP_SECURE, smtpPort === 465);
+  const smtpSecure = parseBoolean(
+    config.SMTP_SECURE,
+    smtpPort === 465,
+    'SMTP_SECURE',
+  );
 
   const smtpFrom =
     typeof config.SMTP_FROM === 'string' && config.SMTP_FROM.trim()
@@ -208,6 +216,94 @@ export function validateEnvironment(config: EnvironmentVariables) {
 
   if (Boolean(smtpUser) !== Boolean(smtpPass)) {
     throw new Error('SMTP_USER y SMTP_PASS deben configurarse juntos.');
+  }
+
+  const mercadoPagoEnabled = parseBoolean(
+    config.MERCADO_PAGO_ENABLED,
+    false,
+    'MERCADO_PAGO_ENABLED',
+  );
+  const mercadoPagoUseSandbox = parseBoolean(
+    config.MERCADO_PAGO_USE_SANDBOX,
+    nodeEnv !== 'production',
+    'MERCADO_PAGO_USE_SANDBOX',
+  );
+  const mercadoPagoAccessToken =
+    typeof config.MERCADO_PAGO_ACCESS_TOKEN === 'string' &&
+    config.MERCADO_PAGO_ACCESS_TOKEN.trim()
+      ? config.MERCADO_PAGO_ACCESS_TOKEN.trim()
+      : undefined;
+  const mercadoPagoWebhookSecret =
+    typeof config.MERCADO_PAGO_WEBHOOK_SECRET === 'string' &&
+    config.MERCADO_PAGO_WEBHOOK_SECRET.trim()
+      ? config.MERCADO_PAGO_WEBHOOK_SECRET.trim()
+      : undefined;
+  const publicApiUrl = validateHttpUrl(
+    typeof config.PUBLIC_API_URL === 'string' && config.PUBLIC_API_URL.trim()
+      ? config.PUBLIC_API_URL.trim()
+      : `http://localhost:${port}`,
+    'PUBLIC_API_URL',
+  );
+  const mercadoPagoExpirationHours = Number(
+    config.MERCADO_PAGO_CHECKOUT_EXPIRATION_HOURS ?? 24,
+  );
+  const mercadoPagoWebhookToleranceSeconds = Number(
+    config.MERCADO_PAGO_WEBHOOK_TOLERANCE_SECONDS ?? 300,
+  );
+  const subscriptionGracePeriodDays = Number(
+    config.SUBSCRIPTION_GRACE_PERIOD_DAYS ?? 5,
+  );
+
+  if (
+    !Number.isInteger(mercadoPagoExpirationHours) ||
+    mercadoPagoExpirationHours < 1 ||
+    mercadoPagoExpirationHours > 168
+  ) {
+    throw new Error(
+      'MERCADO_PAGO_CHECKOUT_EXPIRATION_HOURS debe estar entre 1 y 168.',
+    );
+  }
+
+  if (
+    !Number.isInteger(mercadoPagoWebhookToleranceSeconds) ||
+    mercadoPagoWebhookToleranceSeconds < 60 ||
+    mercadoPagoWebhookToleranceSeconds > 900
+  ) {
+    throw new Error(
+      'MERCADO_PAGO_WEBHOOK_TOLERANCE_SECONDS debe estar entre 60 y 900.',
+    );
+  }
+
+  if (
+    !Number.isInteger(subscriptionGracePeriodDays) ||
+    subscriptionGracePeriodDays < 1 ||
+    subscriptionGracePeriodDays > 30
+  ) {
+    throw new Error('SUBSCRIPTION_GRACE_PERIOD_DAYS debe estar entre 1 y 30.');
+  }
+
+  if (mercadoPagoEnabled) {
+    if (!mercadoPagoAccessToken || !mercadoPagoWebhookSecret) {
+      throw new Error(
+        'MERCADO_PAGO_ACCESS_TOKEN y MERCADO_PAGO_WEBHOOK_SECRET son obligatorios al habilitar Mercado Pago.',
+      );
+    }
+
+    for (const [key, url] of [
+      ['PUBLIC_APP_URL', publicAppUrl],
+      ['PUBLIC_API_URL', publicApiUrl],
+    ] as const) {
+      const parsed = new URL(url);
+      if (
+        parsed.protocol !== 'https:' ||
+        parsed.hostname === 'localhost' ||
+        parsed.hostname === '127.0.0.1'
+      ) {
+        throw new Error(
+          `${key} debe ser una URL HTTPS pública cuando Mercado Pago está habilitado.`,
+        );
+      }
+    }
   }
 
   return {
@@ -235,6 +331,8 @@ export function validateEnvironment(config: EnvironmentVariables) {
 
     PUBLIC_APP_URL: publicAppUrl,
 
+    PUBLIC_API_URL: publicApiUrl,
+
     SMTP_HOST: smtpHost,
 
     SMTP_PORT: smtpPort,
@@ -246,5 +344,19 @@ export function validateEnvironment(config: EnvironmentVariables) {
     SMTP_USER: smtpUser,
 
     SMTP_PASS: smtpPass,
+
+    MERCADO_PAGO_ENABLED: mercadoPagoEnabled,
+
+    MERCADO_PAGO_USE_SANDBOX: mercadoPagoUseSandbox,
+
+    MERCADO_PAGO_ACCESS_TOKEN: mercadoPagoAccessToken,
+
+    MERCADO_PAGO_WEBHOOK_SECRET: mercadoPagoWebhookSecret,
+
+    MERCADO_PAGO_CHECKOUT_EXPIRATION_HOURS: mercadoPagoExpirationHours,
+
+    MERCADO_PAGO_WEBHOOK_TOLERANCE_SECONDS: mercadoPagoWebhookToleranceSeconds,
+
+    SUBSCRIPTION_GRACE_PERIOD_DAYS: subscriptionGracePeriodDays,
   };
 }

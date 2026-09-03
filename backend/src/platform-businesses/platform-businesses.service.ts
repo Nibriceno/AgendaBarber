@@ -328,7 +328,7 @@ export class PlatformBusinessesService {
 
     if (current.business.status !== BusinessStatus.ACTIVE) {
       throw new BadRequestException(
-        'La barbería debe estar activa para enviar la invitación.',
+        'El negocio debe estar activo para enviar la invitación.',
       );
     }
 
@@ -485,7 +485,7 @@ export class PlatformBusinessesService {
       error.code === 'P2002'
     ) {
       throw new ConflictException(
-        'Ya existe una barbería o contacto con esos datos.',
+        'Ya existe un negocio o contacto con esos datos.',
       );
     }
   }

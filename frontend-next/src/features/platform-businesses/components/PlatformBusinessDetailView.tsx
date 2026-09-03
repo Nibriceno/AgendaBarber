@@ -19,7 +19,7 @@ export default function PlatformBusinessDetailView({ businessId, createdState }:
   const [business, setBusiness] = useState<PlatformBusinessDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState(createdState === "sent" ? "Barbería creada. La invitación fue enviada al administrador." : createdState === "pending" ? "Barbería creada, pero el correo no pudo enviarse. Puedes reenviarlo desde esta página." : "");
+  const [notice, setNotice] = useState(createdState === "sent" ? "Negocio creado. La invitación fue enviada al administrador." : createdState === "pending" ? "Negocio creado, pero el correo no pudo enviarse. Puedes reenviarlo desde esta página." : "");
   const [editing, setEditing] = useState(false);
   const [targetStatus, setTargetStatus] = useState<BusinessStatus | null>(null);
   const [resending, setResending] = useState(false);
@@ -27,7 +27,7 @@ export default function PlatformBusinessDetailView({ businessId, createdState }:
   const load = useCallback(async () => {
     setLoading(true);
     try { setBusiness(await getPlatformBusiness(businessId)); setError(""); }
-    catch (requestError) { setError(getApiErrorMessage(requestError, "No fue posible cargar la barbería.")); }
+    catch (requestError) { setError(getApiErrorMessage(requestError, "No fue posible cargar el negocio.")); }
     finally { setLoading(false); }
   }, [businessId]);
 
@@ -41,7 +41,7 @@ export default function PlatformBusinessDetailView({ businessId, createdState }:
         setError("");
       })
       .catch((requestError) => {
-        if (active) setError(getApiErrorMessage(requestError, "No fue posible cargar la barbería."));
+        if (active) setError(getApiErrorMessage(requestError, "No fue posible cargar el negocio."));
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -58,7 +58,7 @@ export default function PlatformBusinessDetailView({ businessId, createdState }:
   };
 
   if (loading && !business) return <div className="space-y-5"><div className="h-28 animate-pulse rounded-3xl bg-zinc-200/70" /><div className="grid gap-5 lg:grid-cols-3"><div className="h-80 animate-pulse rounded-2xl bg-zinc-200/70 lg:col-span-2" /><div className="h-80 animate-pulse rounded-2xl bg-zinc-200/70" /></div></div>;
-  if (!business) return <Card className="p-8 text-center"><p className="font-semibold text-zinc-950">No pudimos abrir esta barbería</p><p className="mt-2 text-sm text-zinc-500">{error}</p><button onClick={() => void load()} className="mt-5 h-11 rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white">Intentar nuevamente</button></Card>;
+  if (!business) return <Card className="p-8 text-center"><p className="font-semibold text-zinc-950">No pudimos abrir este negocio</p><p className="mt-2 text-sm text-zinc-500">{error}</p><button onClick={() => void load()} className="mt-5 h-11 rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white">Intentar nuevamente</button></Card>;
 
   const status = BUSINESS_STATUS_CONFIG[business.status];
   const invitation = business.initialAdmin?.businessInvitation;
@@ -66,7 +66,7 @@ export default function PlatformBusinessDetailView({ businessId, createdState }:
 
   return (
     <div className="space-y-6">
-      <div><Link href="/super-admin/businesses" className="text-sm font-semibold text-zinc-500 hover:text-zinc-950">← Volver a barberías</Link></div>
+      <div><Link href="/super-admin/businesses" className="text-sm font-semibold text-zinc-500 hover:text-zinc-950">← Volver a negocios</Link></div>
       <header className="flex flex-col gap-5 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-zinc-200 sm:p-7 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0"><div className="flex flex-wrap items-center gap-3"><h2 className="truncate text-3xl font-semibold tracking-[-0.04em] text-zinc-950">{business.name}</h2><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${status.className}`}>{status.label}</span></div><p className="mt-2 text-sm text-zinc-500">/{business.slug} · creada el {formatPlatformDate(business.createdAt)}</p></div>
         <div className="flex flex-wrap gap-2"><a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-600 hover:bg-zinc-50">Ver sitio ↗</a><button onClick={() => setEditing(true)} className="h-10 rounded-xl bg-zinc-950 px-4 text-sm font-semibold text-white hover:bg-zinc-800">Editar datos</button></div>
@@ -87,7 +87,7 @@ export default function PlatformBusinessDetailView({ businessId, createdState }:
 
       <Card className="overflow-hidden"><div className="border-b border-zinc-100 px-5 py-5 sm:px-6"><h3 className="font-semibold text-zinc-950">Control operacional</h3><p className="mt-1 text-xs text-zinc-500">Los cambios de estado se aplican inmediatamente en backend.</p></div><div className="grid gap-4 p-5 sm:grid-cols-3 sm:p-6"><button disabled={business.status === "ACTIVE"} onClick={() => setTargetStatus("ACTIVE")} className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-left transition hover:border-emerald-300 disabled:cursor-default disabled:opacity-50"><p className="font-semibold text-emerald-900">Activar</p><p className="mt-1 text-xs leading-5 text-emerald-700">Permite acceso y operación normal.</p></button><button disabled={business.status === "SUSPENDED"} onClick={() => setTargetStatus("SUSPENDED")} className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-left transition hover:border-amber-300 disabled:cursor-default disabled:opacity-50"><p className="font-semibold text-amber-900">Suspender</p><p className="mt-1 text-xs leading-5 text-amber-700">Bloqueo temporal con datos intactos.</p></button><button disabled={business.status === "INACTIVE"} onClick={() => setTargetStatus("INACTIVE")} className="rounded-2xl border border-red-200 bg-red-50 p-4 text-left transition hover:border-red-300 disabled:cursor-default disabled:opacity-50"><p className="font-semibold text-red-900">Inactivar</p><p className="mt-1 text-xs leading-5 text-red-700">Detiene el uso hasta reactivación.</p></button></div>{business.statusReason && <div className="border-t border-zinc-100 px-5 py-4 text-sm text-zinc-600 sm:px-6"><strong className="text-zinc-800">Último motivo:</strong> {business.statusReason}</div>}</Card>
 
-      {editing && <EditPlatformBusinessModal business={business} onClose={() => setEditing(false)} onUpdated={(updated) => { setBusiness(updated); setEditing(false); setNotice("Datos de la barbería actualizados."); }} />}
+      {editing && <EditPlatformBusinessModal business={business} onClose={() => setEditing(false)} onUpdated={(updated) => { setBusiness(updated); setEditing(false); setNotice("Datos del negocio actualizados."); }} />}
       {targetStatus && <ChangeBusinessStatusModal business={business} targetStatus={targetStatus} onClose={() => setTargetStatus(null)} onUpdated={(updated) => { setBusiness(updated); setTargetStatus(null); setNotice(`Estado actualizado a ${BUSINESS_STATUS_CONFIG[updated.status].label.toLowerCase()}.`); }} />}
     </div>
   );

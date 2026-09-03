@@ -5,7 +5,7 @@ import AcceptBusinessInvitationView from "@/features/business-invitations/compon
 
 export const metadata: Metadata = {
   title: `Activar cuenta | ${PLATFORM_BRAND_NAME}`,
-  description: "Configura tu acceso de administrador de barbería.",
+  description: "Configura tu acceso de administrador del negocio.",
 };
 
 export default async function AcceptInvitationPage({ params, searchParams }: PageProps<"/[businessSlug]/aceptar-invitacion">) {

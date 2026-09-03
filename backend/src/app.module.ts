@@ -27,6 +27,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { CsrfGuard } from './auth/guards/csrf.guard';
 import { PlatformAuthModule } from './platform-auth/platform-auth.module';
 import { PlatformBusinessesModule } from './platform-businesses/platform-businesses.module';
+import { PlanRequestsModule } from './plan-requests/plan-requests.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 
 @Module({
   imports: [
@@ -73,6 +75,8 @@ import { PlatformBusinessesModule } from './platform-businesses/platform-busines
     AuthModule,
     PlatformAuthModule,
     PlatformBusinessesModule,
+    PlanRequestsModule,
+    SubscriptionsModule,
     PublicBookingModule,
     DashboardModule,
   ],

@@ -23,7 +23,7 @@ export default function SiteFooter() {
 
   const businessSlug = useMemo(() => {
     const firstSegment = pathname.split("/").filter(Boolean)[0];
-    const platformRoutes = new Set(["terms", "super-admin", "mi-cuenta"]);
+    const platformRoutes = new Set(["terms", "super-admin", "mi-cuenta", "contratar", "pago"]);
 
     return firstSegment && !platformRoutes.has(firstSegment)
       ? firstSegment
@@ -102,8 +102,8 @@ export default function SiteFooter() {
             </Link>
 
             <p className="mt-2 max-w-xl text-xs leading-5 text-zinc-400 sm:text-sm">
-              Una experiencia de reservas clara para clientes y una operación
-              más ordenada para cada barbería.
+              Reservas claras para tus clientes y una operación más ordenada
+              para tu negocio.
             </p>
           </div>
 

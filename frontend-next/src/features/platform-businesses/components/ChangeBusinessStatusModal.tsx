@@ -27,9 +27,9 @@ export function ChangeBusinessStatusModal({
   const config = BUSINESS_STATUS_CONFIG[targetStatus];
   const disruptive = targetStatus !== "ACTIVE";
   const actionTitle = {
-    ACTIVE: "Activar barbería",
-    SUSPENDED: "Suspender barbería",
-    INACTIVE: "Inactivar barbería",
+    ACTIVE: "Activar negocio",
+    SUSPENDED: "Suspender negocio",
+    INACTIVE: "Inactivar negocio",
   }[targetStatus];
 
   const handleSubmit = async (event: FormEvent) => {

@@ -52,7 +52,7 @@ export default function AcceptBusinessInvitationView({
           <div className="px-7 py-10 text-center sm:px-10">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-2xl text-emerald-700">✓</div>
             <h1 className="mt-5 text-2xl font-semibold tracking-tight text-zinc-950">Cuenta activada</h1>
-            <p className="mt-3 text-sm leading-6 text-zinc-500">Tu contraseña quedó configurada de forma segura. Ya puedes entrar al panel de tu barbería.</p>
+            <p className="mt-3 text-sm leading-6 text-zinc-500">Tu contraseña quedó configurada de forma segura. Ya puedes entrar al panel de tu negocio.</p>
             <Link href={`/${businessSlug}/login`} className="mt-7 inline-flex h-11 items-center justify-center rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white hover:bg-zinc-800">Ir a iniciar sesión</Link>
           </div>
         ) : (

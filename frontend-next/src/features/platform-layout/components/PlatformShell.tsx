@@ -10,22 +10,40 @@ import { cn } from "@/lib/utils/cn";
 
 const NAVIGATION = [
   { label: "Dashboard", href: "/super-admin", icon: "grid" },
-  { label: "Barberías", href: "/super-admin/businesses", icon: "store" },
+  { label: "Negocios", href: "/super-admin/businesses", icon: "store" },
+  { label: "Solicitudes", href: "/super-admin/plan-requests", icon: "inbox" },
+  { label: "Descuentos", href: "/super-admin/discounts", icon: "tag" },
 ] as const;
 
-function NavIcon({ name }: { name: "grid" | "store" }) {
-  return name === "grid" ? (
+function NavIcon({ name }: { name: "grid" | "store" | "inbox" | "tag" }) {
+  if (name === "grid") return (
     <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
       <rect x="3" y="3" width="7" height="7" rx="2" />
       <rect x="14" y="3" width="7" height="7" rx="2" />
       <rect x="3" y="14" width="7" height="7" rx="2" />
       <rect x="14" y="14" width="7" height="7" rx="2" />
     </svg>
-  ) : (
+  );
+
+  if (name === "store") return (
     <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 10v10h16V10" />
       <path d="M3 5h18l-1 5a3 3 0 0 1-5 1 3 3 0 0 1-6 0 3 3 0 0 1-5-1L3 5Z" />
       <path d="M9 20v-5h6v5" />
+    </svg>
+  );
+
+  if (name === "inbox") return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 5h16v14H4z" />
+      <path d="M4 14h4l2 2h4l2-2h4" />
+    </svg>
+  );
+
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 13 13 20l-9-9V4h7l9 9Z" />
+      <circle cx="8.5" cy="8.5" r="1" />
     </svg>
   );
 }
@@ -39,8 +57,12 @@ export default function PlatformShell({ children }: { children: ReactNode }) {
   if (!user) return null;
 
   const pageTitle = pathname.startsWith("/super-admin/businesses")
-    ? "Gestión de barberías"
-    : "Resumen de plataforma";
+    ? "Gestión de negocios"
+    : pathname.startsWith("/super-admin/plan-requests")
+      ? "Solicitudes de planes"
+      : pathname.startsWith("/super-admin/discounts")
+        ? "Descuentos de planes"
+      : "Resumen de plataforma";
 
   const handleLogout = async () => {
     await logout();

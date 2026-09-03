@@ -40,7 +40,7 @@ export default function PlatformBusinessesView({ initialCreate = false }: { init
         setError("");
       })
       .catch((requestError) => {
-        if (active) setError(getApiErrorMessage(requestError, "No fue posible cargar las barberías."));
+        if (active) setError(getApiErrorMessage(requestError, "No fue posible cargar los negocios."));
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -61,10 +61,10 @@ export default function PlatformBusinessesView({ initialCreate = false }: { init
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-amber-700">Directorio global</p>
-          <h2 className="mt-1 text-3xl font-semibold tracking-[-0.04em] text-zinc-950">Barberías</h2>
+          <h2 className="mt-1 text-3xl font-semibold tracking-[-0.04em] text-zinc-950">Negocios</h2>
           <p className="mt-2 text-sm text-zinc-500">Busca, revisa y administra cada negocio desde un solo lugar.</p>
         </div>
-        <button onClick={() => setCreateOpen(true)} className="inline-flex h-11 items-center justify-center rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white transition hover:bg-zinc-800">+ Nueva barbería</button>
+        <button onClick={() => setCreateOpen(true)} className="inline-flex h-11 items-center justify-center rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white transition hover:bg-zinc-800">+ Nuevo negocio</button>
       </header>
 
       <Card className="p-4 sm:p-5">
@@ -94,7 +94,7 @@ export default function PlatformBusinessesView({ initialCreate = false }: { init
             <tbody className="divide-y divide-zinc-100">
               {loading ? Array.from({ length: 5 }).map((_, index) => <tr key={index}><td colSpan={5} className="px-5 py-4"><div className="h-10 animate-pulse rounded-lg bg-zinc-100" /></td></tr>) : result?.items.map((business) => {
                 const statusConfig = BUSINESS_STATUS_CONFIG[business.status];
-                return <tr key={business.id} className="transition hover:bg-zinc-50/80"><td className="px-5 py-4"><p className="font-semibold text-zinc-950">{business.name}</p><p className="mt-1 text-xs text-zinc-400">/{business.slug}{business.email ? ` · ${business.email}` : ""}</p></td><td className="px-4 py-4"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${statusConfig.className}`}><span className={`h-1.5 w-1.5 rounded-full ${statusConfig.dotClassName}`} />{statusConfig.label}</span></td><td className="px-4 py-4"><p className="text-sm font-semibold text-zinc-800">{business._count.appointments} reservas</p><p className="mt-1 text-xs text-zinc-400">{business._count.barbers} barberos · {business._count.services} servicios</p></td><td className="px-4 py-4 text-sm text-zinc-500">{formatPlatformDate(business.createdAt)}</td><td className="px-5 py-4 text-right"><Link href={`/super-admin/businesses/${business.id}`} className="inline-flex h-9 items-center rounded-lg border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-700 hover:border-zinc-300 hover:text-zinc-950">Ver detalle</Link></td></tr>;
+                return <tr key={business.id} className="transition hover:bg-zinc-50/80"><td className="px-5 py-4"><p className="font-semibold text-zinc-950">{business.name}</p><p className="mt-1 text-xs text-zinc-400">/{business.slug}{business.email ? ` · ${business.email}` : ""}</p></td><td className="px-4 py-4"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${statusConfig.className}`}><span className={`h-1.5 w-1.5 rounded-full ${statusConfig.dotClassName}`} />{statusConfig.label}</span></td><td className="px-4 py-4"><p className="text-sm font-semibold text-zinc-800">{business._count.appointments} reservas</p><p className="mt-1 text-xs text-zinc-400">{business._count.barbers} profesionales · {business._count.services} servicios</p></td><td className="px-4 py-4 text-sm text-zinc-500">{formatPlatformDate(business.createdAt)}</td><td className="px-5 py-4 text-right"><Link href={`/super-admin/businesses/${business.id}`} className="inline-flex h-9 items-center rounded-lg border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-700 hover:border-zinc-300 hover:text-zinc-950">Ver detalle</Link></td></tr>;
               })}
             </tbody>
           </table>
@@ -103,12 +103,12 @@ export default function PlatformBusinessesView({ initialCreate = false }: { init
         <div className="divide-y divide-zinc-100 md:hidden">
           {!loading && result?.items.map((business) => {
             const statusConfig = BUSINESS_STATUS_CONFIG[business.status];
-            return <Link key={business.id} href={`/super-admin/businesses/${business.id}`} className="block p-5 transition hover:bg-zinc-50"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold text-zinc-950">{business.name}</p><p className="mt-1 truncate text-xs text-zinc-400">/{business.slug}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${statusConfig.className}`}>{statusConfig.label}</span></div><div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-zinc-50 p-3 text-center"><div><p className="font-semibold text-zinc-900">{business._count.appointments}</p><p className="text-[10px] text-zinc-400">Reservas</p></div><div><p className="font-semibold text-zinc-900">{business._count.barbers}</p><p className="text-[10px] text-zinc-400">Barberos</p></div><div><p className="font-semibold text-zinc-900">{business._count.services}</p><p className="text-[10px] text-zinc-400">Servicios</p></div></div></Link>;
+            return <Link key={business.id} href={`/super-admin/businesses/${business.id}`} className="block p-5 transition hover:bg-zinc-50"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold text-zinc-950">{business.name}</p><p className="mt-1 truncate text-xs text-zinc-400">/{business.slug}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${statusConfig.className}`}>{statusConfig.label}</span></div><div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-zinc-50 p-3 text-center"><div><p className="font-semibold text-zinc-900">{business._count.appointments}</p><p className="text-[10px] text-zinc-400">Reservas</p></div><div><p className="font-semibold text-zinc-900">{business._count.barbers}</p><p className="text-[10px] text-zinc-400">Profesionales</p></div><div><p className="font-semibold text-zinc-900">{business._count.services}</p><p className="text-[10px] text-zinc-400">Servicios</p></div></div></Link>;
           })}
           {loading && <div className="p-5"><div className="h-28 animate-pulse rounded-xl bg-zinc-100" /></div>}
         </div>
 
-        {!loading && result?.items.length === 0 && <div className="px-6 py-16 text-center"><p className="font-semibold text-zinc-800">No encontramos barberías</p><p className="mt-2 text-sm text-zinc-500">Prueba con otros filtros o crea un nuevo negocio.</p></div>}
+        {!loading && result?.items.length === 0 && <div className="px-6 py-16 text-center"><p className="font-semibold text-zinc-800">No encontramos negocios</p><p className="mt-2 text-sm text-zinc-500">Prueba con otros filtros o crea un nuevo negocio.</p></div>}
 
         {result && result.pagination.totalPages > 1 && <div className="flex items-center justify-between border-t border-zinc-100 px-5 py-4"><button disabled={page <= 1 || loading} onClick={() => { setLoading(true); setPage((current) => current - 1); }} className="h-9 rounded-lg border border-zinc-200 px-3 text-xs font-semibold text-zinc-600 disabled:opacity-40">Anterior</button><p className="text-xs text-zinc-500">Página <strong className="text-zinc-900">{result.pagination.page}</strong> de {result.pagination.totalPages}</p><button disabled={page >= result.pagination.totalPages || loading} onClick={() => { setLoading(true); setPage((current) => current + 1); }} className="h-9 rounded-lg border border-zinc-200 px-3 text-xs font-semibold text-zinc-600 disabled:opacity-40">Siguiente</button></div>}
       </Card>

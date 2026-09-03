@@ -19,9 +19,83 @@ enum PlatformRole {
 }
 
 enum BusinessStatus {
+  PENDING
   ACTIVE
   SUSPENDED
   INACTIVE
+}
+
+enum BillingInterval {
+  MONTH
+  YEAR
+}
+
+enum PaymentProvider {
+  MERCADO_PAGO
+}
+
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  SUSPENDED
+}
+
+enum SubscriptionPaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELED
+  REFUNDED
+  CHARGED_BACK
+  ERROR
+}
+
+enum SubscriptionPlan {
+  ESSENTIAL
+  PRO
+}
+
+enum BusinessCategory {
+  BARBERSHOP
+  HAIR_SALON
+  NAIL_SALON
+  BEAUTY_CENTER
+  MASSAGE_CENTER
+  OTHER
+}
+
+enum LeadContactPreference {
+  WHATSAPP
+  EMAIL
+  EITHER
+}
+
+enum PlanRequestStatus {
+  NEW
+  CHECKOUT_PENDING
+  PAID
+  PAYMENT_REVERSED
+  CONTACTED
+  CONVERTED
+  CLOSED
+}
+
+enum PlanDiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum PlanPaymentStatus {
+  CREATED
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  REFUNDED
+  CHARGED_BACK
+  ERROR
 }
 
 enum AppointmentStatus {
@@ -87,12 +161,13 @@ model Business {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  users        User[]
-  invitations  BusinessInvitation[]
-  barbers      Barber[]
-  categories   Category[]
-  services     Service[]
-  appointments Appointment[]
+  users         User[]
+  invitations   BusinessInvitation[]
+  barbers       Barber[]
+  categories    Category[]
+  services      Service[]
+  appointments  Appointment[]
+  subscriptions Subscription[]
 
   @@index([status])
   @@map("businesses")
@@ -101,7 +176,7 @@ model Business {
 model CustomerIdentity {
   id String @id @default(uuid()) @db.Uuid
 
-  email String @unique
+  email String  @unique
   phone String?
 
   users User[]
@@ -152,6 +227,7 @@ model User {
   appointmentHistoryEntries AppointmentHistory[] @relation("AppointmentHistoryActor")
   authSessions              AuthSession[]
   businessInvitation        BusinessInvitation?
+  ownedSubscriptions        Subscription[]       @relation("SubscriptionOwner")
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -249,6 +325,224 @@ model BusinessInvitation {
   @@index([businessId, acceptedAt, revokedAt])
   @@index([email, expiresAt])
   @@map("business_invitations")
+}
+
+model PlanRequest {
+  id Int @id @default(autoincrement())
+
+  plan           SubscriptionPlan
+  basePrice      Int
+  discountAmount Int              @default(0)
+  monthlyPrice   Int
+  teamSize       Int
+
+  discountId Int?
+  discount   PlanDiscount? @relation(fields: [discountId], references: [id], onDelete: SetNull)
+  promoCode  String?
+
+  businessName     String
+  businessCategory BusinessCategory
+  desiredSlug      String?
+
+  contactName       String
+  email             String
+  phone             String
+  contactPreference LeadContactPreference
+  notes             String?               @db.VarChar(1000)
+
+  status      PlanRequestStatus @default(NEW)
+  contactedAt DateTime?
+  closedAt    DateTime?
+
+  checkoutTokenHash String?        @unique @db.VarChar(64)
+  checkouts         PlanCheckout[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([email, createdAt])
+  @@map("plan_requests")
+}
+
+model Plan {
+  id Int @id @default(autoincrement())
+
+  code              String          @unique @db.VarChar(50)
+  name              String
+  description       String          @db.VarChar(1000)
+  priceAmount       Int
+  currency          String          @default("CLP") @db.VarChar(3)
+  interval          BillingInterval @default(MONTH)
+  intervalCount     Int             @default(1)
+  minimumTeamSize   Int
+  maximumTeamSize   Int
+  features          Json
+  limits            Json?
+  mercadoPagoPlanId String?         @unique
+  active            Boolean         @default(true)
+
+  discounts     PlanDiscount[]
+  subscriptions Subscription[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("plan_configs")
+}
+
+model PlanDiscount {
+  id Int @id @default(autoincrement())
+
+  planId Int
+  plan   Plan             @relation(fields: [planId], references: [id], onDelete: Restrict)
+  name   String
+  type   PlanDiscountType
+  value  Int
+
+  code      String?   @unique
+  autoApply Boolean   @default(false)
+  isActive  Boolean   @default(true)
+  startsAt  DateTime?
+  endsAt    DateTime?
+
+  planRequests  PlanRequest[]
+  checkouts     PlanCheckout[]
+  subscriptions Subscription[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([planId, autoApply, isActive, startsAt, endsAt])
+  @@map("plan_discounts")
+}
+
+model Subscription {
+  id String @id @default(uuid()) @db.Uuid
+
+  businessId Int
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Restrict)
+
+  planId Int
+  plan   Plan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  discountId   Int?
+  discount     PlanDiscount? @relation(fields: [discountId], references: [id], onDelete: SetNull)
+  discountName String?
+  promoCode    String?
+
+  ownerUserId Int?
+  ownerUser   User? @relation("SubscriptionOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+
+  provider               PaymentProvider
+  providerSubscriptionId String?
+  providerPayerId        String?
+  providerStatus         String?
+  providerStatusDetail   String?
+  providerUpdatedAt      DateTime?
+
+  status    SubscriptionStatus @default(PENDING)
+  activeKey String?            @unique @db.VarChar(64)
+
+  baseAmount     Int
+  discountAmount Int             @default(0)
+  amount         Int
+  currency       String          @db.VarChar(3)
+  interval       BillingInterval
+  intervalCount  Int
+
+  authorizationUrl String? @db.VarChar(1000)
+  paymentMethodId  String?
+
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  nextPaymentAt      DateTime?
+  pastDueAt          DateTime?
+  graceEndsAt        DateTime?
+
+  cancelAtPeriodEnd       Boolean   @default(false)
+  cancellationRequestedAt DateTime?
+  canceledAt              DateTime?
+
+  payments SubscriptionPayment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider, providerSubscriptionId])
+  @@index([businessId, status])
+  @@index([planId, status])
+  @@index([nextPaymentAt])
+  @@index([graceEndsAt])
+  @@map("subscriptions")
+}
+
+model SubscriptionPayment {
+  id String @id @default(uuid()) @db.Uuid
+
+  subscriptionId String       @db.Uuid
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+
+  provider          PaymentProvider
+  providerPaymentId String
+  providerInvoiceId String?
+
+  amount   Int
+  currency String                    @db.VarChar(3)
+  status   SubscriptionPaymentStatus
+
+  rawStatus       String?
+  rawStatusDetail String?
+  periodStart     DateTime?
+  periodEnd       DateTime?
+  paidAt          DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider, providerPaymentId])
+  @@unique([provider, providerInvoiceId])
+  @@index([subscriptionId, createdAt])
+  @@index([status, createdAt])
+  @@map("subscription_payments")
+}
+
+model PlanCheckout {
+  id String @id @default(uuid()) @db.Uuid
+
+  planRequestId Int
+  planRequest   PlanRequest @relation(fields: [planRequestId], references: [id], onDelete: Restrict)
+  activeKey     String?     @unique @db.VarChar(64)
+
+  plan           SubscriptionPlan
+  basePrice      Int
+  discountAmount Int
+  finalAmount    Int
+  currency       String           @default("CLP")
+
+  discountId   Int?
+  discount     PlanDiscount? @relation(fields: [discountId], references: [id], onDelete: SetNull)
+  discountName String?
+  promoCode    String?
+
+  status PlanPaymentStatus @default(CREATED)
+
+  mercadoPagoPreferenceId String?  @unique
+  mercadoPagoPaymentId    String?  @unique
+  mercadoPagoStatus       String?
+  mercadoPagoStatusDetail String?
+  initPoint               String?  @db.VarChar(1000)
+  liveMode                Boolean?
+
+  expiresAt DateTime?
+  paidAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([planRequestId, createdAt])
+  @@index([status, createdAt])
+  @@map("plan_checkouts")
 }
 
 model Barber {

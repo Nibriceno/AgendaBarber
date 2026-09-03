@@ -114,7 +114,7 @@ export function CreatePlatformBusinessModal({
       setForm(INITIAL_FORM);
       onCreated(result);
     } catch (requestError) {
-      setError(getApiErrorMessage(requestError, "No fue posible crear la barbería."));
+      setError(getApiErrorMessage(requestError, "No fue posible crear el negocio."));
     } finally {
       setSubmitting(false);
     }
@@ -123,7 +123,7 @@ export function CreatePlatformBusinessModal({
   return (
     <Modal
       open={open}
-      title="Nueva barbería"
+      title="Nuevo negocio"
       description="Crea el negocio y envía al administrador inicial un enlace privado para definir su contraseña."
       size="large"
       closeDisabled={submitting}
@@ -136,8 +136,8 @@ export function CreatePlatformBusinessModal({
             <div><h3 className="text-sm font-semibold text-zinc-950">Datos del negocio</h3><p className="text-xs text-zinc-500">Identidad y contacto público</p></div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Nombre comercial" name="name" value={form.name} onChange={handleNameChange} required maxLength={120} placeholder="Barbería Central" />
-            <Field label="URL de la barbería" name="slug" value={form.slug} onChange={updateField} required maxLength={100} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="barberia-central" />
+            <Field label="Nombre comercial" name="name" value={form.name} onChange={handleNameChange} required maxLength={120} placeholder="Estudio Central" />
+            <Field label="URL del negocio" name="slug" value={form.slug} onChange={updateField} required maxLength={100} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="estudio-central" />
             <Field label="Correo del negocio (opcional)" name="email" value={form.email} onChange={updateField} type="email" maxLength={150} placeholder="contacto@barberia.cl" />
             <Field label="Teléfono del negocio (opcional)" name="phone" value={form.phone} onChange={updateField} placeholder="+56912345678" />
             <div className="sm:col-span-2"><Field label="Dirección (opcional)" name="address" value={form.address} onChange={updateField} maxLength={250} placeholder="Av. Principal 123, Quilpué" /></div>
@@ -149,7 +149,7 @@ export function CreatePlatformBusinessModal({
         <section>
           <div className="mb-4 flex items-center gap-3">
             <span className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-950 text-xs font-bold text-white">2</span>
-            <div><h3 className="text-sm font-semibold text-zinc-950">Administrador inicial</h3><p className="text-xs text-zinc-500">Quedará asociado exclusivamente a esta barbería</p></div>
+            <div><h3 className="text-sm font-semibold text-zinc-950">Administrador inicial</h3><p className="text-xs text-zinc-500">Quedará asociado exclusivamente a este negocio</p></div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Nombre" name="adminFirstName" value={form.adminFirstName} onChange={updateField} required maxLength={80} autoComplete="off" />
@@ -163,7 +163,7 @@ export function CreatePlatformBusinessModal({
 
         <div className="flex flex-col-reverse gap-3 border-t border-zinc-100 pt-5 sm:flex-row sm:justify-end">
           <Button type="button" variant="secondary" disabled={submitting} onClick={onClose}>Cancelar</Button>
-          <Button type="submit" disabled={submitting}>{submitting ? "Creando e invitando..." : "Crear barbería"}</Button>
+          <Button type="submit" disabled={submitting}>{submitting ? "Creando e invitando..." : "Crear negocio"}</Button>
         </div>
       </form>
     </Modal>

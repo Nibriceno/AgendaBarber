@@ -6,8 +6,8 @@ const TERMS_SECTIONS = [
   {
     title: "1. Alcance del servicio",
     paragraphs: [
-      `${PLATFORM_BRAND_NAME} proporciona una plataforma tecnológica para consultar disponibilidad y gestionar reservas con negocios independientes. Cada barbería es responsable de los servicios que ofrece, sus precios, profesionales, horarios y atención al cliente.`,
-      "Al utilizar la plataforma aceptas estos términos y las condiciones particulares informadas por la barbería seleccionada.",
+      `${PLATFORM_BRAND_NAME} proporciona una plataforma tecnológica para consultar disponibilidad y gestionar reservas con negocios independientes. Cada negocio es responsable de los servicios que ofrece, sus precios, profesionales, horarios y atención al cliente.`,
+      "Al utilizar la plataforma aceptas estos términos y las condiciones particulares informadas por el negocio seleccionado.",
     ],
   },
   {
@@ -18,40 +18,54 @@ const TERMS_SECTIONS = [
     ],
   },
   {
-    title: "3. Cambios, cancelaciones e inasistencias",
+    title: "3. Solicitudes y contratación de planes",
     paragraphs: [
-      `Las reglas y plazos para cancelar o reprogramar son definidos por cada barbería y se informarán durante la gestión de la cita. ${PLATFORM_BRAND_NAME} no reemplaza los acuerdos comerciales entre el cliente y el negocio.`,
+      `Enviar una solicitud permite revisar el precio final antes de pagar. Un representante de ${PLATFORM_BRAND_NAME} confirmará la disponibilidad de la URL solicitada, el alcance y las condiciones aplicables antes de la activación.`,
+      "Los nombres y direcciones web propuestos quedan sujetos a disponibilidad y validación. La contratación se perfeccionará únicamente cuando ambas partes confirmen las condiciones comerciales y el pago correspondiente.",
+    ],
+  },
+  {
+    title: "4. Pagos mediante Mercado Pago",
+    paragraphs: [
+      "Checkout Pro procesa el pago del primer mes fuera de AgendaYa. AgendaYa no recibe ni almacena números de tarjeta, claves bancarias o credenciales de Mercado Pago.",
+      "El pago mediante Checkout Pro es puntual y no autoriza renovaciones automáticas. La plataforma solo considera aprobado un pago después de verificarlo directamente con Mercado Pago.",
+    ],
+  },
+  {
+    title: "5. Cambios, cancelaciones e inasistencias",
+    paragraphs: [
+      `Las reglas y plazos para cancelar o reprogramar son definidos por cada negocio y se informarán durante la gestión de la cita. ${PLATFORM_BRAND_NAME} no reemplaza los acuerdos comerciales entre el cliente y el negocio.`,
       "Si no puedes asistir, debes cancelar o reprogramar con la anticipación exigida por el negocio.",
     ],
   },
   {
-    title: "4. Uso responsable",
+    title: "6. Uso responsable",
     paragraphs: [
       "No está permitido intentar acceder a cuentas ajenas, alterar la disponibilidad, automatizar solicitudes abusivas, interferir con la seguridad o utilizar la plataforma con fines ilícitos.",
       "Podemos limitar temporalmente el acceso cuando sea necesario para proteger a usuarios, negocios o la estabilidad del servicio.",
     ],
   },
   {
-    title: "5. Datos personales",
+    title: "7. Datos personales",
     paragraphs: [
-      "Los datos solicitados se utilizan para autenticar usuarios, gestionar reservas, comunicarlas a la barbería correspondiente, prevenir abusos y mantener la seguridad del servicio.",
+      "Los datos solicitados se utilizan para autenticar usuarios, gestionar reservas, comunicarlas al negocio correspondiente, prevenir abusos y mantener la seguridad del servicio.",
       "El tratamiento de datos debe respetar la normativa chilena aplicable. La información no debe utilizarse para finalidades incompatibles con aquellas informadas al usuario.",
     ],
   },
   {
-    title: "6. Disponibilidad de la plataforma",
+    title: "8. Disponibilidad de la plataforma",
     paragraphs: [
       `Trabajamos para mantener ${PLATFORM_BRAND_NAME} disponible y segura, pero pueden existir interrupciones por mantenimiento, fallas de red o eventos fuera de nuestro control. Cuando sea razonable, procuraremos restaurar el servicio oportunamente.`,
     ],
   },
   {
-    title: "7. Responsabilidad y derechos del consumidor",
+    title: "9. Responsabilidad y derechos del consumidor",
     paragraphs: [
-      "Nada en estos términos limita derechos irrenunciables reconocidos por la legislación aplicable. Los reclamos relacionados con la ejecución del servicio reservado deben dirigirse primero a la barbería que lo presta.",
+      "Nada en estos términos limita derechos irrenunciables reconocidos por la legislación aplicable. Los reclamos relacionados con la ejecución del servicio reservado deben dirigirse primero al negocio que lo presta.",
     ],
   },
   {
-    title: "8. Actualizaciones",
+    title: "10. Actualizaciones",
     paragraphs: [
       "Podemos actualizar estos términos cuando cambien la plataforma, sus funcionalidades o las exigencias normativas. La versión publicada indicará su fecha de actualización.",
     ],
@@ -82,11 +96,11 @@ export default function TermsPage() {
           </h1>
 
           <p className="mt-4 max-w-2xl text-sm leading-6 text-zinc-600 sm:text-base">
-            Estos términos regulan el uso de {PLATFORM_BRAND_NAME} y su sistema de reservas. Léelos antes de crear o gestionar una cita.
+            Estos términos regulan el uso de {PLATFORM_BRAND_NAME}, sus reservas y las solicitudes de planes. Léelos antes de utilizar la plataforma.
           </p>
 
           <p className="mt-5 text-xs text-zinc-400">
-            Última actualización: 22 de agosto de 2026
+            Última actualización: 2 de septiembre de 2026
           </p>
         </header>
 
