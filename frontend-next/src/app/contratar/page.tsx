@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import MarketingHeader from "@/features/marketing/components/MarketingHeader";
 import PlanRequestForm from "@/features/marketing/components/PlanRequestForm";
-import { PLANS, formatPlanPrice, type PlanCode } from "@/features/marketing/config/plans";
+import { PLANS, type PlanCode } from "@/features/marketing/config/plans";
 
 export const metadata: Metadata = {
   title: "Contratar un plan | AgendaYa",
@@ -25,7 +25,7 @@ export default async function ContractPage({ searchParams }: PageProps<"/contrat
           <div className="mt-8 rounded-2xl bg-zinc-950 p-6 text-white">
             <p className="text-sm font-semibold text-amber-300">Plan seleccionado</p>
             <p className="mt-3 text-2xl font-semibold">{plan.name}</p>
-            <p className="mt-1 text-sm text-zinc-400">Precio base: {formatPlanPrice(plan.price)} al mes</p>
+            <p className="mt-1 text-sm text-zinc-400">Cobro mensual recurrente mediante Mercado Pago</p>
             <div className="my-5 h-px bg-white/10" />
             <p className="text-sm leading-6 text-zinc-300">Podrás cambiar de plan dentro del formulario y revisar el precio final, incluido cualquier descuento, antes de ir a Mercado Pago.</p>
           </div>

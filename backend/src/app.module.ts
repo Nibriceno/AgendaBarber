@@ -29,6 +29,7 @@ import { PlatformAuthModule } from './platform-auth/platform-auth.module';
 import { PlatformBusinessesModule } from './platform-businesses/platform-businesses.module';
 import { PlanRequestsModule } from './plan-requests/plan-requests.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -77,6 +78,7 @@ import { SubscriptionsModule } from './subscriptions/subscriptions.module';
     PlatformBusinessesModule,
     PlanRequestsModule,
     SubscriptionsModule,
+    WebhooksModule,
     PublicBookingModule,
     DashboardModule,
   ],

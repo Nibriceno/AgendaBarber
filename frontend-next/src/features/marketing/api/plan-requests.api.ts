@@ -1,10 +1,22 @@
 import apiClient from "@/lib/api/client";
 
 import type { PlanCode } from "../config/plans";
-import type { CreatePlanRequestInput, CreatePlanRequestResponse, PlanCheckoutResponse, PlanCheckoutStatus, PublicPlanQuote } from "../types/plan-request.types";
+import type { CreateOnboardingInput, CreatePlanRequestInput, CreatePlanRequestResponse, OnboardingStatus, PlanCheckoutResponse, PlanCheckoutStatus, PublicPlanQuote } from "../types/plan-request.types";
 
 export async function createPlanRequest(input: CreatePlanRequestInput) {
   const response = await apiClient.post<CreatePlanRequestResponse>("/plan-requests", input);
+  return response.data;
+}
+
+export async function createOnboarding(input: CreateOnboardingInput) {
+  const response = await apiClient.post<OnboardingStatus>("/onboarding", input);
+  return response.data;
+}
+
+export async function getOnboardingStatus(id: number, token: string) {
+  const response = await apiClient.get<OnboardingStatus>(`/onboarding/${id}`, {
+    params: { token },
+  });
   return response.data;
 }
 

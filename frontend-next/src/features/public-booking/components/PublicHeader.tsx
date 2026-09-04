@@ -30,7 +30,11 @@ export default function PublicHeader({
 
   const staffPanelHref =
     user && user.role !== "CLIENT"
-      ? getDefaultRouteForRole(user.role, user.businessSlug)
+      ? getDefaultRouteForRole(
+          user.role,
+          user.businessSlug,
+          user.billingRestricted,
+        )
       : null;
 
   useEffect(() => {

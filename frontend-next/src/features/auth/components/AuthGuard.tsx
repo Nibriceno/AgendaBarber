@@ -1,23 +1,15 @@
 "use client";
 
-import {
-  ReactNode,
-  useEffect,
-} from "react";
+import { ReactNode, useEffect } from "react";
 
-import {
-  usePathname,
-  useRouter,
-} from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import {
   canAccessProtectedRoute,
   getDefaultRouteForRole,
 } from "../lib/auth-routing";
 
-import {
-  useAuth,
-} from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext";
 
 type AuthGuardProps = {
   children: ReactNode;
@@ -31,52 +23,37 @@ function LoadingScreen() {
       <div className="flex flex-col items-center gap-4">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-950" />
 
-        <p className="text-sm text-zinc-500">
-          Comprobando sesión...
-        </p>
+        <p className="text-sm text-zinc-500">Comprobando sesión...</p>
       </div>
     </main>
   );
 }
 
-export function AuthGuard({
-  children,
-  businessSlug,
-}: AuthGuardProps) {
-  const router =
-    useRouter();
+export function AuthGuard({ children, businessSlug }: AuthGuardProps) {
+  const router = useRouter();
 
-  const pathname =
-    usePathname();
+  const pathname = usePathname();
 
-  const {
-    user,
-    loading,
-    isAuthenticated,
-  } =
-    useAuth();
+  const { user, loading, isAuthenticated } = useAuth();
 
-  const legacyDashboard =
-    `/${businessSlug}/dashboard`;
+  const legacyDashboard = `/${businessSlug}/dashboard`;
 
-  const defaultRoute =
-    user
-      ? getDefaultRouteForRole(
-          user.role,
-          user.role === "CLIENT" ? businessSlug : user.businessSlug,
-        )
-      : null;
+  const defaultRoute = user
+    ? getDefaultRouteForRole(
+        user.role,
+        user.role === "CLIENT" ? businessSlug : user.businessSlug,
+        user.billingRestricted,
+      )
+    : null;
 
   const belongsToRouteBusiness =
     user?.role === "CLIENT" || user?.businessSlug === businessSlug;
 
   const hasAccess =
-    user && belongsToRouteBusiness
-      ? canAccessProtectedRoute(
-          pathname,
-          businessSlug,
-          user.role,
-        )
+    user &&
+    belongsToRouteBusiness &&
+    (!user.billingRestricted || pathname === `/${businessSlug}/subscription`)
+      ? canAccessProtectedRoute(pathname, businessSlug, user.role)
       : false;
 
   useEffect(() => {
@@ -84,13 +61,8 @@ export function AuthGuard({
       return;
     }
 
-    if (
-      !isAuthenticated ||
-      !user
-    ) {
-      router.replace(
-        `/${businessSlug}/login`,
-      );
+    if (!isAuthenticated || !user) {
+      router.replace(`/${businessSlug}/login`);
 
       return;
     }
@@ -100,6 +72,7 @@ export function AuthGuard({
         getDefaultRouteForRole(
           user.role,
           user.businessSlug,
+          user.billingRestricted,
         ),
       );
 
@@ -110,14 +83,12 @@ export function AuthGuard({
      * Compatibilidad temporal con
      * /dashboard antiguo.
      */
-    if (
-      pathname ===
-      legacyDashboard
-    ) {
+    if (pathname === legacyDashboard) {
       router.replace(
         getDefaultRouteForRole(
           user.role,
           user.role === "CLIENT" ? businessSlug : user.businessSlug,
+          user.billingRestricted,
         ),
       );
 
@@ -129,6 +100,7 @@ export function AuthGuard({
         getDefaultRouteForRole(
           user.role,
           user.role === "CLIENT" ? businessSlug : user.businessSlug,
+          user.billingRestricted,
         ),
       );
     }
@@ -144,39 +116,20 @@ export function AuthGuard({
   ]);
 
   if (loading) {
-    return (
-      <LoadingScreen />
-    );
+    return <LoadingScreen />;
   }
 
-  if (
-    !isAuthenticated ||
-    !user
-  ) {
+  if (!isAuthenticated || !user) {
     return null;
   }
 
-  if (
-    pathname ===
-    legacyDashboard
-  ) {
-    return (
-      <LoadingScreen />
-    );
+  if (pathname === legacyDashboard) {
+    return <LoadingScreen />;
   }
 
-  if (
-    !defaultRoute ||
-    !hasAccess
-  ) {
-    return (
-      <LoadingScreen />
-    );
+  if (!defaultRoute || !hasAccess) {
+    return <LoadingScreen />;
   }
 
-  return (
-    <>
-      {children}
-    </>
-  );
+  return <>{children}</>;
 }

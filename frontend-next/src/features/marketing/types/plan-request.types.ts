@@ -31,6 +31,38 @@ export type CreatePlanRequestResponse = {
   message: string;
 };
 
+export type CreateOnboardingInput = CreatePlanRequestInput & {
+  idempotencyKey: string;
+  onboardingToken: string;
+};
+
+export type OnboardingStatus = {
+  requestId: number;
+  requestStatus:
+    | "NEW"
+    | "CHECKOUT_PENDING"
+    | "PAID"
+    | "PAYMENT_REVERSED"
+    | "CONTACTED"
+    | "CONVERTED"
+    | "CLOSED";
+  business: {
+    name: string;
+    desiredSlug: string | null;
+    status: "PENDING" | "ACTIVE" | "SUSPENDED" | "INACTIVE";
+  };
+  subscription: {
+    id: string;
+    status: "PENDING" | "ACTIVE" | "PAST_DUE" | "CANCELED" | "SUSPENDED";
+    plan: { code: PlanCode; name: string };
+    amount: number;
+    currency: string;
+    authorizationUrl: string | null;
+    paymentConfirmed: boolean;
+    paidAt: string | null;
+  };
+};
+
 export type PublicPlanQuote = {
   plan: PlanCode;
   name: string;
@@ -39,6 +71,12 @@ export type PublicPlanQuote = {
   finalPrice: number;
   minimumTeamSize: number;
   maximumTeamSize: number;
+  description: string | null;
+  currency: string;
+  interval: "MONTH" | "YEAR";
+  intervalCount: number;
+  features: unknown;
+  limits: unknown;
   discount: { id: number; name: string; type: "PERCENTAGE" | "FIXED_AMOUNT"; value: number; code: string | null; autoApply: boolean } | null;
 };
 

@@ -9,6 +9,7 @@ import {
 import { createHmac } from 'node:crypto';
 import { Payment } from 'mercadopago';
 
+import { MercadoPagoWebhookVerifier } from '../payments/mercado-pago-webhook-verifier';
 import { PlanPaymentsService } from './plan-payments.service';
 
 describe('PlanPaymentsService', () => {
@@ -44,7 +45,11 @@ describe('PlanPaymentsService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new PlanPaymentsService(prisma as never, config as never);
+    service = new PlanPaymentsService(
+      prisma as never,
+      config as never,
+      new MercadoPagoWebhookVerifier(config as never),
+    );
   });
 
   afterEach(() => {

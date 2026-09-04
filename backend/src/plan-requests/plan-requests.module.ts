@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 
 import { PlatformAuthModule } from '../platform-auth/platform-auth.module';
+import { PlatformBusinessesModule } from '../platform-businesses/platform-businesses.module';
+import { PaymentsModule } from '../payments/payments.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PlatformPlanRequestsController } from './platform-plan-requests.controller';
 import { PlatformPlanDiscountsController } from './platform-plan-discounts.controller';
@@ -12,7 +14,12 @@ import { PublicPlansController } from './public-plans.controller';
 import { PublicPlanRequestsController } from './public-plan-requests.controller';
 
 @Module({
-  imports: [PrismaModule, PlatformAuthModule],
+  imports: [
+    PrismaModule,
+    PlatformAuthModule,
+    PlatformBusinessesModule,
+    PaymentsModule,
+  ],
   controllers: [
     PublicPlanRequestsController,
     PublicPlansController,

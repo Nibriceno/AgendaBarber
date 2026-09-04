@@ -91,4 +91,10 @@ export const APP_NAVIGATION:
       segment: "social-links",
       roles: ["ADMIN"],
     },
+
+    {
+      label: "Suscripción",
+      segment: "subscription",
+      roles: ["ADMIN"],
+    },
   ];

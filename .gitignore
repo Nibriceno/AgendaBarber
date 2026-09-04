@@ -23,3 +23,6 @@ backups/
 
 # Docker local environment
 .env.docker
+
+# Local ngrok credentials and tunnels
+ngrok.agendaya.yml

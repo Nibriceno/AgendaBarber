@@ -29,4 +29,16 @@ export class SubscriptionsController {
   ) {
     return this.subscriptionsService.create(currentUser, dto);
   }
+
+  @Throttle({ default: { limit: 3, ttl: 10 * 60_000 } })
+  @Post('me/cancel')
+  cancel(@CurrentUser() currentUser: AuthUser) {
+    return this.subscriptionsService.cancelAtPeriodEnd(currentUser);
+  }
+
+  @Throttle({ default: { limit: 3, ttl: 10 * 60_000 } })
+  @Post('me/reactivate')
+  reactivate(@CurrentUser() currentUser: AuthUser) {
+    return this.subscriptionsService.reactivate(currentUser);
+  }
 }

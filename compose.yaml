@@ -82,13 +82,15 @@ services:
       NODE_ENV: production
       PORT: 3000
       DATABASE_URL: ${DATABASE_URL}
-      FRONTEND_URL: http://localhost:3001
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
       PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3001}
       PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:${BACKEND_PORT:-3000}}
       MERCADO_PAGO_ENABLED: ${MERCADO_PAGO_ENABLED:-false}
       MERCADO_PAGO_USE_SANDBOX: ${MERCADO_PAGO_USE_SANDBOX:-true}
+      MERCADO_PAGO_ALLOW_UNSIGNED_SUBSCRIPTION_WEBHOOKS: ${MERCADO_PAGO_ALLOW_UNSIGNED_SUBSCRIPTION_WEBHOOKS:-false}
       MERCADO_PAGO_ACCESS_TOKEN: ${MERCADO_PAGO_ACCESS_TOKEN:-}
       MERCADO_PAGO_WEBHOOK_SECRET: ${MERCADO_PAGO_WEBHOOK_SECRET:-}
+      MERCADO_PAGO_TEST_PAYER_EMAIL: ${MERCADO_PAGO_TEST_PAYER_EMAIL:-}
       MERCADO_PAGO_CHECKOUT_EXPIRATION_HOURS: ${MERCADO_PAGO_CHECKOUT_EXPIRATION_HOURS:-24}
       MERCADO_PAGO_WEBHOOK_TOLERANCE_SECONDS: ${MERCADO_PAGO_WEBHOOK_TOLERANCE_SECONDS:-300}
       SUBSCRIPTION_GRACE_PERIOD_DAYS: ${SUBSCRIPTION_GRACE_PERIOD_DAYS:-5}
@@ -116,7 +118,7 @@ services:
       context: ./frontend-next
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: "http://localhost:${BACKEND_PORT:-3000}"
+        NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:-http://localhost:${BACKEND_PORT:-3000}}"
 
     image: agendabarber-frontend-next:local
 
@@ -149,6 +151,27 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+
+
+  tunnel-gateway:
+    image: nginx:1.29-alpine
+
+    container_name: agendabarber-tunnel-gateway
+
+    restart: unless-stopped
+
+    volumes:
+      - ./infra/nginx/tunnel-gateway.conf:/etc/nginx/nginx.conf:ro
+
+    ports:
+      - "127.0.0.1:${TUNNEL_GATEWAY_PORT:-8080}:80"
+
+    depends_on:
+      backend:
+        condition: service_started
+
+      frontend:
+        condition: service_healthy
 
 
 volumes:

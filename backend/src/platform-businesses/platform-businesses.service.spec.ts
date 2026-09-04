@@ -7,6 +7,7 @@ describe('PlatformBusinessesService', () => {
   const transaction = {
     business: {
       create: jest.fn(),
+      updateMany: jest.fn(),
     },
     user: {
       create: jest.fn(),
@@ -14,12 +15,14 @@ describe('PlatformBusinessesService', () => {
     },
     businessInvitation: {
       create: jest.fn(),
+      upsert: jest.fn(),
       findFirst: jest.fn(),
       updateMany: jest.fn(),
     },
     authSession: {
       updateMany: jest.fn(),
     },
+    planRequest: { update: jest.fn() },
   };
   const prisma = {
     $transaction: jest.fn(
@@ -40,6 +43,7 @@ describe('PlatformBusinessesService', () => {
       findFirst: jest.fn(),
       update: jest.fn(),
     },
+    planRequest: { findUnique: jest.fn() },
   };
   const configService = {
     getOrThrow: jest.fn(() => 'http://localhost:3001'),
@@ -166,6 +170,45 @@ describe('PlatformBusinessesService', () => {
       }),
     });
     expect(result.businessSlug).toBe('barber-pro');
+  });
+
+  it('publishes a paid onboarding and sends the owner invitation', async () => {
+    prisma.planRequest.findUnique.mockResolvedValue({
+      id: 31,
+      status: 'PAID',
+      contactedAt: null,
+      business: {
+        id: 8,
+        name: 'Barber Pro',
+        slug: 'barber-pro',
+        status: BusinessStatus.PENDING,
+        users: [
+          {
+            id: 12,
+            firstName: 'Ana',
+            email: 'ana@example.com',
+          },
+        ],
+        subscriptions: [{ payments: [{ id: 'payment-1' }] }],
+      },
+    });
+    transaction.business.updateMany.mockResolvedValue({ count: 1 });
+    transaction.businessInvitation.upsert.mockResolvedValue({ id: 30 });
+    prisma.businessInvitation.update.mockResolvedValue({ id: 30 });
+    emailService.sendBusinessAdminInvitation.mockResolvedValue(undefined);
+
+    const result = await service.publishOnboarding(31, 3);
+
+    expect(transaction.business.updateMany).toHaveBeenCalledWith({
+      where: { id: 8, status: BusinessStatus.PENDING },
+      data: expect.objectContaining({ status: BusinessStatus.ACTIVE }),
+    });
+    expect(transaction.planRequest.update).toHaveBeenCalledWith({
+      where: { id: 31 },
+      data: expect.objectContaining({ status: 'CONVERTED' }),
+    });
+    expect(emailService.sendBusinessAdminInvitation).toHaveBeenCalled();
+    expect(result.invitationEmailSent).toBe(true);
   });
 
   it('rejects an expired or reused invitation without changing the user', async () => {

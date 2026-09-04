@@ -21,11 +21,33 @@ export type PlatformPlanRequest = {
   promoCode: string | null;
   discount: { id: number; name: string; type: "PERCENTAGE" | "FIXED_AMOUNT"; value: number } | null;
   checkouts: { id: string; status: "CREATED" | "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED" | "REFUNDED" | "CHARGED_BACK" | "ERROR"; mercadoPagoPaymentId: string | null; mercadoPagoStatus: string | null; paidAt: string | null; createdAt: string }[];
+  business: {
+    id: number;
+    slug: string;
+    status: "PENDING" | "ACTIVE" | "SUSPENDED" | "INACTIVE";
+    subscriptions: {
+      id: string;
+      status: "PENDING" | "ACTIVE" | "PAST_DUE" | "CANCELED" | "SUSPENDED";
+      payments: {
+        status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELED" | "REFUNDED" | "CHARGED_BACK" | "ERROR";
+        paidAt: string | null;
+      }[];
+    }[];
+  } | null;
   status: PlanRequestStatus;
   contactedAt: string | null;
   closedAt: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type PublishOnboardingResponse = {
+  businessId: number;
+  businessSlug: string;
+  requestStatus: "CONVERTED";
+  businessStatus: "ACTIVE";
+  invitationEmailSent: boolean;
+  invitationExpiresAt: string;
 };
 
 export type PlatformPlanRequestsResponse = {

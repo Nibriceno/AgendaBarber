@@ -6,7 +6,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { BusinessStatus, Prisma, UserRole } from '@prisma/client';
+import {
+  BusinessStatus,
+  PlanRequestStatus,
+  Prisma,
+  SubscriptionPaymentStatus,
+  UserRole,
+} from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'node:crypto';
 
@@ -285,6 +291,125 @@ export class PlatformBusinessesService {
       this.rethrowDatabaseConflict(error);
       throw error;
     }
+  }
+
+  async publishOnboarding(planRequestId: number, platformUserId: number) {
+    const current = await this.prisma.planRequest.findUnique({
+      where: { id: planRequestId },
+      include: {
+        business: {
+          include: {
+            users: {
+              where: { role: UserRole.ADMIN, deletedAt: null },
+              orderBy: { createdAt: 'asc' },
+              take: 1,
+            },
+            subscriptions: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              include: {
+                payments: {
+                  where: { status: SubscriptionPaymentStatus.APPROVED },
+                  take: 1,
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!current?.business) {
+      throw new NotFoundException('La solicitud no tiene un negocio asociado.');
+    }
+    if (
+      current.status !== PlanRequestStatus.PAID ||
+      !current.business.subscriptions[0]?.payments.length
+    ) {
+      throw new BadRequestException(
+        'Mercado Pago todavía no confirmó el primer cobro.',
+      );
+    }
+    if (current.business.status !== BusinessStatus.PENDING) {
+      throw new ConflictException(
+        'El negocio ya fue publicado o no está pendiente.',
+      );
+    }
+
+    const owner = current.business.users[0];
+    if (!owner?.email) {
+      throw new BadRequestException(
+        'El administrador inicial necesita un correo electrónico.',
+      );
+    }
+
+    const token = this.createToken();
+    const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
+    const published = await this.prisma.$transaction(
+      async (transaction) => {
+        const claimed = await transaction.business.updateMany({
+          where: { id: current.business!.id, status: BusinessStatus.PENDING },
+          data: {
+            status: BusinessStatus.ACTIVE,
+            statusChangedAt: new Date(),
+            statusReason: null,
+            suspendedAt: null,
+          },
+        });
+        if (claimed.count !== 1) {
+          throw new ConflictException('El negocio ya no está pendiente.');
+        }
+
+        await transaction.planRequest.update({
+          where: { id: current.id },
+          data: {
+            status: PlanRequestStatus.CONVERTED,
+            contactedAt: current.contactedAt ?? new Date(),
+            closedAt: new Date(),
+          },
+        });
+
+        const invitation = await transaction.businessInvitation.upsert({
+          where: { userId: owner.id },
+          create: {
+            businessId: current.business!.id,
+            userId: owner.id,
+            invitedByPlatformUserId: platformUserId,
+            email: owner.email!,
+            tokenHash: this.hashToken(token),
+            expiresAt,
+          },
+          update: {
+            invitedByPlatformUserId: platformUserId,
+            email: owner.email!,
+            tokenHash: this.hashToken(token),
+            expiresAt,
+            sentAt: null,
+            acceptedAt: null,
+            revokedAt: null,
+          },
+        });
+
+        return { invitation };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+
+    const invitationEmailSent = await this.sendInvitation({
+      invitationId: published.invitation.id,
+      token,
+      business: current.business,
+      user: owner,
+    });
+
+    return {
+      businessId: current.business.id,
+      businessSlug: current.business.slug,
+      requestStatus: PlanRequestStatus.CONVERTED,
+      businessStatus: BusinessStatus.ACTIVE,
+      invitationEmailSent,
+      invitationExpiresAt: expiresAt,
+    };
   }
 
   async update(id: number, dto: UpdatePlatformBusinessDto) {

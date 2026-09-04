@@ -14,7 +14,10 @@ import {
   ACCESS_TOKEN_COOKIE,
   getRequestCookie,
 } from '../cookies/auth-cookie.util';
-import { isBusinessOperational } from '../../businesses/business-status';
+import {
+  isBusinessBillingRestricted,
+  isBusinessOperational,
+} from '../../businesses/business-status';
 
 type JwtPayload = {
   tokenType: 'tenant';
@@ -40,6 +43,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     super({
+      passReqToCallback: true,
       jwtFromRequest: ExtractJwt.fromExtractors([
         (request: Request) =>
           getRequestCookie(request, ACCESS_TOKEN_COOKIE) ?? null,
@@ -52,7 +56,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: JwtPayload) {
+  async validate(request: Request, payload: JwtPayload) {
     if (payload.tokenType !== 'tenant' || !payload.sessionId) {
       throw new UnauthorizedException('Sesión inválida.');
     }
@@ -94,6 +98,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           select: {
             slug: true,
             status: true,
+            statusReason: true,
             deletedAt: true,
           },
         },
@@ -104,11 +109,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Sesión inválida.');
     }
 
+    const billingRestricted =
+      user.role === UserRole.ADMIN &&
+      isBusinessBillingRestricted(user.business);
     if (
       user.role !== UserRole.CLIENT &&
       !isBusinessOperational(user.business)
     ) {
-      throw new UnauthorizedException('Sesión inválida.');
+      if (!billingRestricted || !this.isBillingRecoveryRequest(request)) {
+        throw new UnauthorizedException('Sesión inválida.');
+      }
     }
 
     if ((payload.authVersion ?? 0) !== user.authVersion) {
@@ -126,6 +136,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       lastName: user.lastName,
       phone: user.phone,
       email: user.email,
+      billingRestricted,
     };
+  }
+
+  private isBillingRecoveryRequest(request: Request) {
+    const path = request.path.toLowerCase();
+    return path === '/auth/me' || path.startsWith('/subscriptions');
   }
 }

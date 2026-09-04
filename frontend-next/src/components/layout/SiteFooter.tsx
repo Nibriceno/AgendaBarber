@@ -23,7 +23,7 @@ export default function SiteFooter() {
 
   const businessSlug = useMemo(() => {
     const firstSegment = pathname.split("/").filter(Boolean)[0];
-    const platformRoutes = new Set(["terms", "super-admin", "mi-cuenta", "contratar", "pago"]);
+    const platformRoutes = new Set(["terms", "super-admin", "mi-cuenta", "contratar", "pago", "suscripcion"]);
 
     return firstSegment && !platformRoutes.has(firstSegment)
       ? firstSegment

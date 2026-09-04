@@ -10,6 +10,7 @@ export type AuthUser = {
   businessId: number;
   businessSlug: string;
   customerIdentityId?: string | null;
+  billingRestricted?: boolean;
 };
 
 export type LoginCredentials = {

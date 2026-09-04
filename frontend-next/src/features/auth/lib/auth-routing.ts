@@ -1,11 +1,13 @@
-import type {
-  UserRole,
-} from "../types/auth.types";
+import type { UserRole } from "../types/auth.types";
 
 export function getDefaultRouteForRole(
   role: UserRole,
   businessSlug: string,
+  billingRestricted = false,
 ): string {
+  if (role === "ADMIN" && billingRestricted) {
+    return `/${businessSlug}/subscription`;
+  }
   switch (role) {
     case "ADMIN":
     case "RECEPTIONIST":
@@ -24,9 +26,7 @@ export function getDefaultRouteForRole(
   }
 }
 
-export function getRoleAreaLabel(
-  role: UserRole,
-): string {
+export function getRoleAreaLabel(role: UserRole): string {
   switch (role) {
     case "ADMIN":
       return "Panel de administración";
@@ -53,23 +53,14 @@ export function canAccessProtectedRoute(
    * La ruta protegida debe pertenecer
    * al businessSlug actual.
    */
-  if (
-    pathname !== basePath &&
-    !pathname.startsWith(`${basePath}/`)
-  ) {
+  if (pathname !== basePath && !pathname.startsWith(`${basePath}/`)) {
     return false;
   }
 
-  const relativePath =
-    pathname.slice(basePath.length) || "/";
+  const relativePath = pathname.slice(basePath.length) || "/";
 
-  const matches = (
-    prefix: string,
-  ) =>
-    relativePath === prefix ||
-    relativePath.startsWith(
-      `${prefix}/`,
-    );
+  const matches = (prefix: string) =>
+    relativePath === prefix || relativePath.startsWith(`${prefix}/`);
 
   /*
    * ============================================================
@@ -79,9 +70,7 @@ export function canAccessProtectedRoute(
    * AuthGuard la redirige posteriormente
    * al dashboard correspondiente al rol.
    */
-  if (
-    relativePath === "/dashboard"
-  ) {
+  if (relativePath === "/dashboard") {
     return true;
   }
 
@@ -96,13 +85,8 @@ export function canAccessProtectedRoute(
    *
    * ADMIN y RECEPTIONIST.
    */
-  if (
-    matches("/admin/dashboard")
-  ) {
-    return (
-      role === "ADMIN" ||
-      role === "RECEPTIONIST"
-    );
+  if (matches("/admin/dashboard")) {
+    return role === "ADMIN" || role === "RECEPTIONIST";
   }
 
   /*
@@ -114,7 +98,8 @@ export function canAccessProtectedRoute(
     matches("/services") ||
     matches("/categories") ||
     matches("/booking-settings") ||
-    matches("/social-links")
+    matches("/social-links") ||
+    matches("/subscription")
   ) {
     return role === "ADMIN";
   }
@@ -135,9 +120,7 @@ export function canAccessProtectedRoute(
    *
    * Únicamente ADMIN.
    */
-  if (
-    matches("/staff")
-  ) {
+  if (matches("/staff")) {
     return role === "ADMIN";
   }
 
@@ -157,10 +140,7 @@ export function canAccessProtectedRoute(
     matches("/schedules") ||
     matches("/appointments")
   ) {
-    return (
-      role === "ADMIN" ||
-      role === "RECEPTIONIST"
-    );
+    return role === "ADMIN" || role === "RECEPTIONIST";
   }
 
   /*
@@ -172,9 +152,7 @@ export function canAccessProtectedRoute(
   /*
    * Dashboard personal del barbero.
    */
-  if (
-    matches("/barber/dashboard")
-  ) {
+  if (matches("/barber/dashboard")) {
     return role === "BARBER";
   }
 
@@ -188,9 +166,7 @@ export function canAccessProtectedRoute(
    *
    * queda reservada al BARBER.
    */
-  if (
-    matches("/barber")
-  ) {
+  if (matches("/barber")) {
     return role === "BARBER";
   }
 
@@ -207,9 +183,7 @@ export function canAccessProtectedRoute(
    * /account/profile
    * etc.
    */
-  if (
-    matches("/account")
-  ) {
+  if (matches("/account")) {
     return role === "CLIENT";
   }
 

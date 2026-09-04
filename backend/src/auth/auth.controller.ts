@@ -241,6 +241,7 @@ export class AuthController {
       lastName: currentUser.lastName,
       phone: currentUser.phone,
       email: currentUser.email,
+      billingRestricted: currentUser.billingRestricted ?? false,
     };
   }
 

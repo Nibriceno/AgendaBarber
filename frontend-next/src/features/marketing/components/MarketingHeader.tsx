@@ -1,8 +1,17 @@
+"use client";
+
 import Link from "next/link";
 
 import { PLATFORM_BRAND_INITIALS, PLATFORM_BRAND_NAME } from "@/config/site";
+import { useAuth } from "@/features/auth/context/AuthContext";
 
 export default function MarketingHeader() {
+  const { user, loading } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
+  const primaryHref = isAdmin
+    ? `/${user.businessSlug}/subscription`
+    : "/#planes";
+
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-zinc-950/90 text-white backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:h-18 sm:px-6 lg:px-8">
@@ -17,7 +26,9 @@ export default function MarketingHeader() {
         </nav>
         <div className="flex items-center gap-2">
           <Link href="/mi-cuenta/reservas" className="hidden rounded-xl px-4 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-white/5 hover:text-white sm:inline-flex">Mis reservas</Link>
-          <Link href="/#planes" className="inline-flex min-h-10 items-center rounded-xl bg-white px-4 text-sm font-semibold text-zinc-950 transition hover:bg-amber-200">Ver planes</Link>
+          <Link href={primaryHref} className="inline-flex min-h-10 items-center rounded-xl bg-white px-4 text-sm font-semibold text-zinc-950 transition hover:bg-amber-200">
+            {loading ? "AgendaYa" : isAdmin ? "Mi suscripción" : "Ver planes"}
+          </Link>
         </div>
       </div>
     </header>

@@ -52,6 +52,14 @@ enum SubscriptionPaymentStatus {
   ERROR
 }
 
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
 enum SubscriptionPlan {
   ESSENTIAL
   PRO
@@ -168,6 +176,7 @@ model Business {
   services      Service[]
   appointments  Appointment[]
   subscriptions Subscription[]
+  planRequest   PlanRequest?
 
   @@index([status])
   @@map("businesses")
@@ -330,6 +339,9 @@ model BusinessInvitation {
 model PlanRequest {
   id Int @id @default(autoincrement())
 
+  businessId Int?      @unique
+  business   Business? @relation(fields: [businessId], references: [id], onDelete: SetNull)
+
   plan           SubscriptionPlan
   basePrice      Int
   discountAmount Int              @default(0)
@@ -356,6 +368,9 @@ model PlanRequest {
 
   checkoutTokenHash String?        @unique @db.VarChar(64)
   checkouts         PlanCheckout[]
+
+  onboardingKey       String? @unique @db.Uuid
+  onboardingTokenHash String? @unique @db.VarChar(64)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -437,6 +452,8 @@ model Subscription {
   provider               PaymentProvider
   providerSubscriptionId String?
   providerPayerId        String?
+  providerApplicationId  String?
+  providerCollectorId    String?
   providerStatus         String?
   providerStatusDetail   String?
   providerUpdatedAt      DateTime?
@@ -491,11 +508,15 @@ model SubscriptionPayment {
   currency String                    @db.VarChar(3)
   status   SubscriptionPaymentStatus
 
-  rawStatus       String?
-  rawStatusDetail String?
-  periodStart     DateTime?
-  periodEnd       DateTime?
-  paidAt          DateTime?
+  rawStatus          String?
+  rawStatusDetail    String?
+  paymentMethodId    String?
+  cardLastFourDigits String?   @db.VarChar(4)
+  liveMode           Boolean?
+  providerUpdatedAt  DateTime?
+  periodStart        DateTime?
+  periodEnd          DateTime?
+  paidAt             DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -505,6 +526,35 @@ model SubscriptionPayment {
   @@index([subscriptionId, createdAt])
   @@index([status, createdAt])
   @@map("subscription_payments")
+}
+
+model WebhookEvent {
+  id String @id @default(uuid()) @db.Uuid
+
+  provider           PaymentProvider
+  eventKey           String          @unique @db.VarChar(255)
+  providerEventId    String?         @db.VarChar(255)
+  topic              String          @db.VarChar(80)
+  action             String?         @db.VarChar(100)
+  resourceId         String          @db.VarChar(255)
+  requestId          String?         @db.VarChar(255)
+  liveMode           Boolean?
+  signatureValidated Boolean         @default(false)
+  payloadHash        String          @db.VarChar(64)
+
+  status              WebhookEventStatus @default(RECEIVED)
+  attempts            Int                @default(0)
+  processingStartedAt DateTime?
+  processedAt         DateTime?
+  nextAttemptAt       DateTime?
+  lastError           String?            @db.VarChar(1000)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([topic, resourceId])
+  @@map("webhook_events")
 }
 
 model PlanCheckout {

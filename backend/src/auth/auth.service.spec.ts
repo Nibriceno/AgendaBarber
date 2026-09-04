@@ -297,7 +297,9 @@ describe('AuthService', () => {
       expect.objectContaining({
         where: {
           slug: 'barber-booking',
-          status: BusinessStatus.ACTIVE,
+          status: {
+            in: [BusinessStatus.ACTIVE, BusinessStatus.SUSPENDED],
+          },
           deletedAt: null,
         },
       }),
@@ -364,6 +366,38 @@ describe('AuthService', () => {
       '40b52e1d-e89e-4a8b-bc83-5a18a63cb64d',
     );
     expect(result.user.businessSlug).toBe('barber-booking');
+  });
+
+  it('permite al admin suspendido por facturación entrar sólo en modo recuperación', async () => {
+    const passwordHash = await bcrypt.hash('ClaveSegura1', 4);
+    prisma.business.findFirst.mockResolvedValue({
+      id: 7,
+      slug: 'barber-booking',
+      status: BusinessStatus.SUSPENDED,
+      statusReason: 'Suscripción de Mercado Pago vencida.',
+      deletedAt: null,
+    });
+    prisma.user.findFirst.mockResolvedValue({
+      id: 21,
+      businessId: 7,
+      firstName: 'Ana',
+      lastName: 'Pérez',
+      phone: '+56912345678',
+      email: 'ana@example.com',
+      role: UserRole.ADMIN,
+      passwordHash,
+      emailVerified: true,
+      authVersion: 3,
+      customerIdentityId: null,
+    });
+
+    const result = await service.login({
+      businessSlug: 'barber-booking',
+      email: 'ana@example.com',
+      password: 'ClaveSegura1',
+    });
+
+    expect(result.user.billingRestricted).toBe(true);
   });
 
   it('rota el refresh token y no reutiliza el secreto anterior', async () => {

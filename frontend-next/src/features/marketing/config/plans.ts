@@ -4,7 +4,6 @@ export const PLANS = {
   ESSENTIAL: {
     code: "ESSENTIAL" as const,
     name: "Esencial",
-    price: 19_990,
     teamRange: "1 a 5 personas",
     minimumTeamSize: 1,
     maximumTeamSize: 5,
@@ -20,7 +19,6 @@ export const PLANS = {
   PRO: {
     code: "PRO" as const,
     name: "Equipo",
-    price: 29_990,
     teamRange: "6 a 12 personas",
     minimumTeamSize: 6,
     maximumTeamSize: 12,

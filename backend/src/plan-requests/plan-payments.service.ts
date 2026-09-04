@@ -5,7 +5,6 @@ import {
   Logger,
   NotFoundException,
   ServiceUnavailableException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -15,14 +14,9 @@ import {
   Prisma,
 } from '@prisma/client';
 import { createHash } from 'node:crypto';
-import {
-  InvalidWebhookSignatureError,
-  MercadoPagoConfig,
-  Payment,
-  Preference,
-  WebhookSignatureValidator,
-} from 'mercadopago';
+import { MercadoPagoConfig, Payment, Preference } from 'mercadopago';
 
+import { MercadoPagoWebhookVerifier } from '../payments/mercado-pago-webhook-verifier';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -32,6 +26,7 @@ export class PlanPaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly webhookVerifier: MercadoPagoWebhookVerifier,
   ) {}
 
   private getMercadoPagoClients() {
@@ -253,34 +248,7 @@ export class PlanPaymentsService {
     dataId?: string | string[];
     type?: string;
   }) {
-    const secret = this.configService.get<string>(
-      'MERCADO_PAGO_WEBHOOK_SECRET',
-    );
-
-    if (!secret) {
-      throw new ServiceUnavailableException(
-        'La firma de webhooks de Mercado Pago no está configurada.',
-      );
-    }
-
-    try {
-      WebhookSignatureValidator.validate({
-        xSignature: input.xSignature,
-        xRequestId: input.xRequestId,
-        dataId: input.dataId,
-        secret,
-        toleranceSeconds: this.configService.get<number>(
-          'MERCADO_PAGO_WEBHOOK_TOLERANCE_SECONDS',
-          300,
-        ),
-      });
-    } catch (error) {
-      if (error instanceof InvalidWebhookSignatureError) {
-        this.logger.warn(`Webhook de Mercado Pago rechazado: ${error.reason}.`);
-        throw new UnauthorizedException('Firma de webhook inválida.');
-      }
-      throw error;
-    }
+    this.webhookVerifier.verify({ ...input, topic: 'payment' });
 
     if (input.type && input.type !== 'payment') {
       return { received: true };

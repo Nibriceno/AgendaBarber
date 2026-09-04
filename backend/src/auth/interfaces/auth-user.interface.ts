@@ -11,4 +11,5 @@ export interface AuthUser {
   lastName: string;
   phone: string;
   email: string | null;
+  billingRestricted?: boolean;
 }

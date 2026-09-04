@@ -25,6 +25,10 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## AgendaYa
+
+- [Arquitectura y operación de suscripciones de Mercado Pago](docs/mercado-pago-suscripciones.md)
+
 ## Project setup
 
 ```bash

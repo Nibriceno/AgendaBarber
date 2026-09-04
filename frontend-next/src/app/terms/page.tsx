@@ -27,8 +27,8 @@ const TERMS_SECTIONS = [
   {
     title: "4. Pagos mediante Mercado Pago",
     paragraphs: [
-      "Checkout Pro procesa el pago del primer mes fuera de AgendaYa. AgendaYa no recibe ni almacena números de tarjeta, claves bancarias o credenciales de Mercado Pago.",
-      "El pago mediante Checkout Pro es puntual y no autoriza renovaciones automáticas. La plataforma solo considera aprobado un pago después de verificarlo directamente con Mercado Pago.",
+      "Mercado Pago procesa la autorización y los cobros recurrentes fuera de AgendaYa. AgendaYa no recibe ni almacena números completos de tarjeta, códigos de seguridad, claves bancarias o credenciales de Mercado Pago.",
+      "La suscripción autoriza renovaciones mensuales automáticas hasta su cancelación. AgendaYa sólo considera activa una suscripción después de verificar su estado directamente con Mercado Pago mediante el backend.",
     ],
   },
   {
@@ -100,7 +100,7 @@ export default function TermsPage() {
           </p>
 
           <p className="mt-5 text-xs text-zinc-400">
-            Última actualización: 2 de septiembre de 2026
+            Última actualización: 3 de septiembre de 2026
           </p>
         </header>
 

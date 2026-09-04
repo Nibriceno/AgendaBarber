@@ -113,6 +113,26 @@ export class PlanRequestsService {
               createdAt: true,
             },
           },
+          business: {
+            select: {
+              id: true,
+              slug: true,
+              status: true,
+              subscriptions: {
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+                select: {
+                  id: true,
+                  status: true,
+                  payments: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 1,
+                    select: { status: true, paidAt: true },
+                  },
+                },
+              },
+            },
+          },
         },
       }),
       this.prisma.planRequest.count({ where }),
@@ -132,11 +152,16 @@ export class PlanRequestsService {
   async updateStatus(id: number, status: PlanRequestStatus) {
     const existing = await this.prisma.planRequest.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, businessId: true },
     });
 
     if (!existing) {
       throw new NotFoundException('La solicitud indicada no existe.');
+    }
+    if (existing.businessId) {
+      throw new BadRequestException(
+        'El estado de esta contratación se administra mediante Mercado Pago y la publicación del negocio.',
+      );
     }
 
     const now = new Date();

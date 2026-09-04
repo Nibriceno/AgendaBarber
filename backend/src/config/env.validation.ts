@@ -228,6 +228,11 @@ export function validateEnvironment(config: EnvironmentVariables) {
     nodeEnv !== 'production',
     'MERCADO_PAGO_USE_SANDBOX',
   );
+  const mercadoPagoAllowUnsignedSubscriptionWebhooks = parseBoolean(
+    config.MERCADO_PAGO_ALLOW_UNSIGNED_SUBSCRIPTION_WEBHOOKS,
+    false,
+    'MERCADO_PAGO_ALLOW_UNSIGNED_SUBSCRIPTION_WEBHOOKS',
+  );
   const mercadoPagoAccessToken =
     typeof config.MERCADO_PAGO_ACCESS_TOKEN === 'string' &&
     config.MERCADO_PAGO_ACCESS_TOKEN.trim()
@@ -238,6 +243,20 @@ export function validateEnvironment(config: EnvironmentVariables) {
     config.MERCADO_PAGO_WEBHOOK_SECRET.trim()
       ? config.MERCADO_PAGO_WEBHOOK_SECRET.trim()
       : undefined;
+  const mercadoPagoTestPayerEmail =
+    typeof config.MERCADO_PAGO_TEST_PAYER_EMAIL === 'string' &&
+    config.MERCADO_PAGO_TEST_PAYER_EMAIL.trim()
+      ? config.MERCADO_PAGO_TEST_PAYER_EMAIL.trim().toLowerCase()
+      : undefined;
+
+  if (
+    mercadoPagoTestPayerEmail &&
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mercadoPagoTestPayerEmail)
+  ) {
+    throw new Error(
+      'MERCADO_PAGO_TEST_PAYER_EMAIL debe ser un correo electrónico válido.',
+    );
+  }
   const publicApiUrl = validateHttpUrl(
     typeof config.PUBLIC_API_URL === 'string' && config.PUBLIC_API_URL.trim()
       ? config.PUBLIC_API_URL.trim()
@@ -349,9 +368,14 @@ export function validateEnvironment(config: EnvironmentVariables) {
 
     MERCADO_PAGO_USE_SANDBOX: mercadoPagoUseSandbox,
 
+    MERCADO_PAGO_ALLOW_UNSIGNED_SUBSCRIPTION_WEBHOOKS:
+      mercadoPagoAllowUnsignedSubscriptionWebhooks,
+
     MERCADO_PAGO_ACCESS_TOKEN: mercadoPagoAccessToken,
 
     MERCADO_PAGO_WEBHOOK_SECRET: mercadoPagoWebhookSecret,
+
+    MERCADO_PAGO_TEST_PAYER_EMAIL: mercadoPagoTestPayerEmail,
 
     MERCADO_PAGO_CHECKOUT_EXPIRATION_HOURS: mercadoPagoExpirationHours,
 

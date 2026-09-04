@@ -29,7 +29,7 @@ export default function Home() {
               <Link href="/#planes" className="inline-flex min-h-12 items-center justify-center rounded-xl bg-amber-300 px-6 text-sm font-semibold text-zinc-950 transition hover:bg-amber-200">Conocer los planes</Link>
               <Link href="/mi-cuenta/reservas" className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/15 px-6 text-sm font-semibold text-white transition hover:bg-white/10">Soy cliente: ver mis reservas</Link>
             </div>
-            <p className="mt-5 text-xs text-zinc-500">Sin cobros en este paso · Te acompañamos en la configuración</p>
+            <p className="mt-5 text-xs text-zinc-500">Precios claros · Cobro mensual seguro mediante Mercado Pago</p>
           </div>
 
           <div className="relative mx-auto w-full max-w-xl lg:ml-auto">
@@ -74,7 +74,7 @@ export default function Home() {
         <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
           <div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">Comienza acompañado</p><h2 className="mt-4 text-3xl font-semibold tracking-[-0.04em] sm:text-5xl">Tu página lista, sin configurarla a ciegas.</h2><p className="mt-5 text-base leading-7 text-zinc-600">Nos cuentas sobre tu negocio y un agente de AgendaYa te ayuda a revisar la URL, cargar la información inicial y coordinar la activación.</p></div>
           <ol className="grid gap-px overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-200 sm:grid-cols-3">
-            {[["1", "Elige tu plan", "Selecciona según la cantidad de personas de tu equipo."], ["2", "Revisa y paga", "Confirma los datos y paga el primer mes mediante Checkout Pro."], ["3", "Te contactamos", "Coordinamos por WhatsApp o correo la configuración y activación."]].map(([number, title, text]) => <li key={number} className="bg-white p-7 sm:p-8"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-950 text-xs font-semibold text-white">{number}</span><h3 className="mt-8 font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-zinc-600">{text}</p></li>)}
+            {[["1", "Elige tu plan", "Selecciona según la cantidad de personas de tu equipo."], ["2", "Activa tu acceso", "Confirmamos la URL y recibes una invitación segura de administrador."], ["3", "Autoriza la suscripción", "Mercado Pago gestiona el cobro mensual y AgendaYa confirma la activación."]].map(([number, title, text]) => <li key={number} className="bg-white p-7 sm:p-8"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-950 text-xs font-semibold text-white">{number}</span><h3 className="mt-8 font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-zinc-600">{text}</p></li>)}
           </ol>
         </div>
       </section>

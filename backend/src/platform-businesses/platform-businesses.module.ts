@@ -12,5 +12,6 @@ import { PlatformBusinessesService } from './platform-businesses.service';
   imports: [PrismaModule, EmailModule, BusinessesModule, PlatformAuthModule],
   controllers: [PlatformBusinessesController, BusinessInvitationsController],
   providers: [PlatformBusinessesService],
+  exports: [PlatformBusinessesService],
 })
 export class PlatformBusinessesModule {}

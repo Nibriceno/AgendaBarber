@@ -11,7 +11,7 @@ import { ConfigService } from '@nestjs/config';
 
 import { JwtService } from '@nestjs/jwt';
 
-import { Prisma, UserRole } from '@prisma/client';
+import { BusinessStatus, Prisma, UserRole } from '@prisma/client';
 
 import * as bcrypt from 'bcrypt';
 
@@ -34,6 +34,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { EmailService } from '../email/email.service';
 import {
   ACTIVE_BUSINESS_WHERE,
+  isBusinessBillingRestricted,
   isBusinessOperational,
 } from '../businesses/business-status';
 
@@ -46,6 +47,7 @@ type SessionResponse = {
     businessId: number;
     businessSlug: string;
     customerIdentityId: string | null;
+    billingRestricted: boolean;
     firstName: string;
     lastName: string;
     phone: string;
@@ -102,12 +104,16 @@ export class AuthService {
     const business = await this.prisma.business.findFirst({
       where: {
         slug: normalizedBusinessSlug,
-        ...ACTIVE_BUSINESS_WHERE,
+        deletedAt: null,
+        status: { in: [BusinessStatus.ACTIVE, BusinessStatus.SUSPENDED] },
       },
 
       select: {
         id: true,
         slug: true,
+        status: true,
+        statusReason: true,
+        deletedAt: true,
       },
     });
 
@@ -217,7 +223,19 @@ export class AuthService {
       );
     }
 
-    return this.createSession(user, sessionBusinessSlug);
+    const billingRestricted =
+      user.role === UserRole.ADMIN &&
+      user.businessId === business.id &&
+      isBusinessBillingRestricted(business);
+    if (
+      user.role !== UserRole.CLIENT &&
+      !isBusinessOperational(business) &&
+      !billingRestricted
+    ) {
+      throw new UnauthorizedException('Credenciales incorrectas');
+    }
+
+    return this.createSession(user, sessionBusinessSlug, billingRestricted);
   }
 
   async refreshSession(refreshToken: string): Promise<SessionResponse> {
@@ -254,6 +272,7 @@ export class AuthService {
               select: {
                 slug: true,
                 status: true,
+                statusReason: true,
                 deletedAt: true,
               },
             },
@@ -271,7 +290,9 @@ export class AuthService {
       session.user.isActive &&
       !session.user.deletedAt &&
       (session.user.role === UserRole.CLIENT ||
-        isBusinessOperational(session.user.business));
+        isBusinessOperational(session.user.business) ||
+        (session.user.role === UserRole.ADMIN &&
+          isBusinessBillingRestricted(session.user.business)));
 
     if (!sessionIsUsable) {
       throw new UnauthorizedException('Sesión inválida o vencida.');
@@ -319,7 +340,12 @@ export class AuthService {
     return {
       accessToken,
       refreshToken: rotatedRefreshToken,
-      user: this.toSessionUser(session.user, session.user.business.slug),
+      user: this.toSessionUser(
+        session.user,
+        session.user.business.slug,
+        session.user.role === UserRole.ADMIN &&
+          isBusinessBillingRestricted(session.user.business),
+      ),
     };
   }
 
@@ -1007,6 +1033,7 @@ export class AuthService {
   private async createSession(
     user: SessionUserData,
     businessSlug: string,
+    billingRestricted = false,
   ): Promise<SessionResponse> {
     const sessionId = randomUUID();
     const refreshToken = this.createRefreshToken(sessionId);
@@ -1031,7 +1058,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      user: this.toSessionUser(user, businessSlug),
+      user: this.toSessionUser(user, businessSlug, billingRestricted),
     };
   }
 
@@ -1047,7 +1074,11 @@ export class AuthService {
     });
   }
 
-  private toSessionUser(user: SessionUserData, businessSlug: string) {
+  private toSessionUser(
+    user: SessionUserData,
+    businessSlug: string,
+    billingRestricted = false,
+  ) {
     return {
       id: user.id,
       businessId: user.businessId,
@@ -1058,6 +1089,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       customerIdentityId: user.customerIdentityId,
+      billingRestricted,
     };
   }
 
